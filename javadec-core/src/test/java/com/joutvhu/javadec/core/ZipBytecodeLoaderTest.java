@@ -112,4 +112,50 @@ public class ZipBytecodeLoaderTest {
             ZipBytecodeLoader.extractArchive(maliciousZip, extractTarget, null);
         });
     }
+
+    @Test
+    public void testExtractToRelativeDirectory(@TempDir Path tempDir) throws Exception {
+        File normalZip = tempDir.resolve("normal.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(normalZip))) {
+            zos.putNextEntry(new ZipEntry("hello.txt"));
+            zos.write("world".getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+
+        // Target directory passed as relative path
+        File relativeTarget = new File(".");
+        File subDir = new File(relativeTarget, "target/test-extract-relative");
+        int count = ZipBytecodeLoader.extractArchive(normalZip, subDir, null);
+        assertEquals(1, count);
+        assertTrue(new File(subDir, "hello.txt").exists());
+        new File(subDir, "hello.txt").delete();
+        subDir.delete();
+    }
+
+    @Test
+    public void testCaseInsensitiveInnerClassResolution(@TempDir Path tempDir) throws Exception {
+        File jar = tempDir.resolve("inner.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            zos.putNextEntry(new ZipEntry("com/example/MyService$InnerWorker.class"));
+            zos.write(new byte[]{42});
+            zos.closeEntry();
+        }
+
+        // Resolving using dot notation with mixed/lower case
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(jar, "com/example/myservice$innerworker.class");
+        assertArrayEquals(new byte[]{42}, bytes);
+    }
+
+    @Test
+    public void testSpringBootBinaryAssetSizeInReadResource(@TempDir Path tempDir) throws Exception {
+        File jar = tempDir.resolve("boot-asset.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            zos.putNextEntry(new ZipEntry("BOOT-INF/classes/static/logo.png"));
+            zos.write(new byte[]{1, 2, 3, 4, 5});
+            zos.closeEntry();
+        }
+
+        String result = ZipBytecodeLoader.readResourceText(jar, "static/logo.png");
+        assertTrue(result.contains("5 bytes"));
+    }
 }

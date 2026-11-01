@@ -27,9 +27,11 @@ public class AsmClassOutlineExtractor {
     public static ClassOutline extract(byte[] bytecode) {
         // Ensure compatibility with newer bytecode versions (e.g. Java 22-25) by patching version bytes for ASM reader
         byte[] compatibleBytecode = bytecode;
-        if (bytecode.length > 7) {
-            int majorVersion = ((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF);
-            if (majorVersion > 65) { // ASM 9.7 officially supports up to Java 21 (major 65)
+        int originalMajorVersion = (bytecode != null && bytecode.length > 7)
+                ? (((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF))
+                : 0;
+        if (bytecode != null && bytecode.length > 7) {
+            if (originalMajorVersion > 65) { // ASM 9.7 officially supports up to Java 21 (major 65)
                 compatibleBytecode = bytecode.clone();
                 compatibleBytecode[6] = 0;
                 compatibleBytecode[7] = 65; // Treat as Java 21 for ASM AST reading
@@ -47,8 +49,9 @@ public class AsmClassOutlineExtractor {
             packageName = internalName.substring(0, lastSlash).replace('/', '.');
         }
 
+        boolean isInterface = (classNode.access & Opcodes.ACC_INTERFACE) != 0;
         String classKind = "class";
-        if ((classNode.access & Opcodes.ACC_INTERFACE) != 0) {
+        if (isInterface) {
             classKind = (classNode.access & Opcodes.ACC_ANNOTATION) != 0 ? "@interface" : "interface";
         } else if ((classNode.access & Opcodes.ACC_ENUM) != 0) {
             classKind = "enum";
@@ -56,7 +59,7 @@ public class AsmClassOutlineExtractor {
             classKind = "record";
         }
 
-        String accessModifiers = parseAccessModifiers(classNode.access);
+        String accessModifiers = parseClassModifiers(classNode.access);
         List<String> annotations = extractAnnotations(classNode.visibleAnnotations, classNode.invisibleAnnotations);
 
         // Record components e.g. User(String name, int age)
@@ -84,7 +87,7 @@ public class AsmClassOutlineExtractor {
                     fields.add(new ClassOutline.FieldOutline(
                             fn.name,
                             fieldType,
-                            parseAccessModifiers(fn.access),
+                            parseFieldModifiers(fn.access),
                             extractAnnotations(fn.visibleAnnotations, fn.invisibleAnnotations)
                     ));
                 }
@@ -146,7 +149,7 @@ public class AsmClassOutlineExtractor {
                         returnType,
                         parameters,
                         exceptions,
-                        parseAccessModifiers(mn.access),
+                        parseMethodModifiers(mn.access, isInterface),
                         extractAnnotations(mn.visibleAnnotations, mn.invisibleAnnotations)
                 ));
             }
@@ -166,11 +169,11 @@ public class AsmClassOutlineExtractor {
                 enumConstants,
                 fields,
                 methods,
-                classNode.version & 0xFFFF
+                originalMajorVersion > 0 ? originalMajorVersion : (classNode.version & 0xFFFF)
         );
     }
 
-    private static String parseAccessModifiers(int access) {
+    private static String parseClassModifiers(int access) {
         List<String> mods = new ArrayList<>();
         if ((access & Opcodes.ACC_PUBLIC) != 0) mods.add("public");
         if ((access & Opcodes.ACC_PROTECTED) != 0) mods.add("protected");
@@ -178,7 +181,37 @@ public class AsmClassOutlineExtractor {
         if ((access & Opcodes.ACC_STATIC) != 0) mods.add("static");
         if ((access & Opcodes.ACC_FINAL) != 0) mods.add("final");
         if ((access & Opcodes.ACC_ABSTRACT) != 0 && (access & Opcodes.ACC_INTERFACE) == 0) mods.add("abstract");
+        return String.join(" ", mods);
+    }
+
+    private static String parseFieldModifiers(int access) {
+        List<String> mods = new ArrayList<>();
+        if ((access & Opcodes.ACC_PUBLIC) != 0) mods.add("public");
+        if ((access & Opcodes.ACC_PROTECTED) != 0) mods.add("protected");
+        if ((access & Opcodes.ACC_PRIVATE) != 0) mods.add("private");
+        if ((access & Opcodes.ACC_STATIC) != 0) mods.add("static");
+        if ((access & Opcodes.ACC_FINAL) != 0) mods.add("final");
+        if ((access & Opcodes.ACC_VOLATILE) != 0) mods.add("volatile");
+        if ((access & Opcodes.ACC_TRANSIENT) != 0) mods.add("transient");
+        return String.join(" ", mods);
+    }
+
+    private static String parseMethodModifiers(int access, boolean isInterface) {
+        List<String> mods = new ArrayList<>();
+        if ((access & Opcodes.ACC_PUBLIC) != 0) mods.add("public");
+        if ((access & Opcodes.ACC_PROTECTED) != 0) mods.add("protected");
+        if ((access & Opcodes.ACC_PRIVATE) != 0) mods.add("private");
+        if ((access & Opcodes.ACC_STATIC) != 0) mods.add("static");
+        if ((access & Opcodes.ACC_FINAL) != 0) mods.add("final");
         if ((access & Opcodes.ACC_SYNCHRONIZED) != 0) mods.add("synchronized");
+        if ((access & Opcodes.ACC_NATIVE) != 0) mods.add("native");
+        if ((access & Opcodes.ACC_ABSTRACT) != 0) {
+            if (!isInterface) {
+                mods.add("abstract");
+            }
+        } else if (isInterface && (access & Opcodes.ACC_STATIC) == 0 && (access & Opcodes.ACC_PRIVATE) == 0) {
+            mods.add("default");
+        }
         return String.join(" ", mods);
     }
 

@@ -114,4 +114,33 @@ public class ClassOutlineTest {
         assertTrue(skel.contains("ACTIVE, INACTIVE, PENDING;")); // enum constants
         assertTrue(skel.contains("private final int code;"));
     }
+
+    @Test
+    public void testAsmExtractorWithRealCompiledClass() {
+        String source = """
+                package com.example;
+                public class RealService {
+                    private volatile int counter;
+                    public synchronized void increment() {
+                        counter++;
+                    }
+                }
+                """;
+        java.util.Map<String, byte[]> classes = TestCompiler.compile("com.example.RealService", source);
+        byte[] bytes = classes.get("com.example.RealService");
+        assertNotNull(bytes);
+
+        com.joutvhu.javadec.core.model.ClassOutline outline = com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor.extract(bytes);
+        String skeleton = outline.toSkeletonSource();
+
+        // Class modifier MUST be "public class", NOT "public synchronized class"
+        assertTrue(skeleton.contains("public class RealService"));
+        assertFalse(skeleton.contains("synchronized class"));
+
+        // Field modifier MUST include "volatile"
+        assertTrue(skeleton.contains("private volatile int counter;"));
+
+        // Method modifier MUST include "synchronized"
+        assertTrue(skeleton.contains("public synchronized void increment();"));
+    }
 }

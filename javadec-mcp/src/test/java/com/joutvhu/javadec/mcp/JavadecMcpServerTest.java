@@ -107,6 +107,12 @@ public class JavadecMcpServerTest {
             JavadecMcpServer.validateTarget("nonexistent.jar!com/example/MyClass.class");
         });
 
+        // Target with folder containing exclamation mark
+        FileNotFoundException ex = assertThrows(FileNotFoundException.class, () -> {
+            JavadecMcpServer.validateTarget("my!folder/archive.jar!com/example/MyClass.class");
+        });
+        assertTrue(ex.getMessage().contains("my!folder/archive.jar"));
+
         // Passing archive directly without class throws IllegalArgumentException
         assertThrows(IllegalArgumentException.class, () -> {
             JavadecMcpServer.validateTarget(refJar.getAbsolutePath());

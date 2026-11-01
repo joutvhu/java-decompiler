@@ -96,6 +96,26 @@ public class MethodExtractorTest {
     }
 
     @Test
+    public void testExtractOverloadsWithGenericTypesAndAnnotationsHavingCommas() {
+        String code = """
+                package com.example;
+                import java.util.Map;
+                public class Service {
+                    public void query(@RequestParam(name = "q", required = false) Map<String, Object> params, int limit) {
+                        System.out.println("Complex overload");
+                    }
+                    public void query(String simple) {
+                        System.out.println("Simple overload");
+                    }
+                }
+                """;
+
+        String result = decompiler.extractMethodFromSource(code, "query(Map, int)");
+        assertTrue(result.contains("Complex overload"));
+        assertFalse(result.contains("Simple overload"));
+    }
+
+    @Test
     public void testExtractInterfaceMethod() {
         String code = """
                 package com.example;

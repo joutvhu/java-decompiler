@@ -126,14 +126,14 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             ClassOutline outline;
 
-            if (resolvedTarget.contains("!")) {
-                String[] parts = resolvedTarget.split("!", 2);
-                File jar = PathUtil.resolveFile(parts[0]);
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
                 if (!jar.exists()) {
                     System.err.println("Error: Archive file not found: " + jar.getPath());
                     return 1;
                 }
-                outline = decompiler.getArchiveClassOutline(jar, parts[1]);
+                outline = decompiler.getArchiveClassOutline(jar, resolvedTarget.substring(bangIdx + 1));
             } else {
                 File file = PathUtil.resolveFile(resolvedTarget);
                 if (!file.exists()) {
@@ -188,14 +188,14 @@ public class JavadecCli implements Callable<Integer> {
                     .lineLimit(limit)
                     .build();
 
-            if (resolvedTarget.contains("!")) {
-                String[] parts = resolvedTarget.split("!", 2);
-                File jar = PathUtil.resolveFile(parts[0]);
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
                 if (!jar.exists()) {
                     System.err.println("Error: Archive file not found: " + jar.getPath());
                     return 1;
                 }
-                String classPath = parts[1];
+                String classPath = resolvedTarget.substring(bangIdx + 1);
 
                 if (method != null && !method.isBlank()) {
                     String result = decompiler.decompileArchiveMethod(jar, classPath, method, options);

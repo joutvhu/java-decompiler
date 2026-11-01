@@ -116,10 +116,12 @@ public class ZipBytecodeLoader {
         }
 
         // 2. Inner-class resolution: replace trailing '/' with '$' for inner classes written with dot notation
+        List<String> candidates = new ArrayList<>();
         String candidate = normalizedPath;
         int slashIdx;
         while ((slashIdx = candidate.lastIndexOf('/')) > 0) {
             candidate = candidate.substring(0, slashIdx) + "$" + candidate.substring(slashIdx + 1);
+            candidates.add(candidate);
             for (String prefix : ARCHIVE_CLASS_PREFIXES) {
                 String fullPath = prefix + candidate;
                 ZipEntry entry = zipFile.getEntry(fullPath);
@@ -133,8 +135,13 @@ public class ZipBytecodeLoader {
             ZipEntry e = entries.nextElement();
             String name = e.getName();
             for (String prefix : ARCHIVE_CLASS_PREFIXES) {
-                if (name.equalsIgnoreCase(prefix + normalizedPath) || name.equalsIgnoreCase(prefix + candidate)) {
+                if (name.equalsIgnoreCase(prefix + normalizedPath)) {
                     return e;
+                }
+                for (String cand : candidates) {
+                    if (name.equalsIgnoreCase(prefix + cand)) {
+                        return e;
+                    }
                 }
             }
         }
@@ -286,8 +293,13 @@ public class ZipBytecodeLoader {
             if (lower.endsWith(ext)) {
                 long size = -1;
                 try (ZipFile zipFile = new ZipFile(archiveFile)) {
-                    ZipEntry entry = zipFile.getEntry(normalized);
-                    if (entry != null) size = entry.getSize();
+                    for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                        ZipEntry entry = zipFile.getEntry(prefix + normalized);
+                        if (entry != null) {
+                            size = entry.getSize();
+                            break;
+                        }
+                    }
                 } catch (Exception ignored) {}
                 String sizeStr = size >= 0 ? " (" + size + " bytes)" : "";
                 return String.format("// [Binary asset: %s%s. Not a text resource. Use extract_archive to save to disk.]", normalized, sizeStr);
@@ -411,8 +423,9 @@ public class ZipBytecodeLoader {
 
                 File destFile = new File(targetDir, safeName);
                 // Security check against zip-slip vulnerability
-                Path destPath = destFile.toPath().normalize();
-                if (!destPath.startsWith(targetDir.toPath().normalize())) {
+                Path destPath = destFile.toPath().toAbsolutePath().normalize();
+                Path baseTargetPath = targetDir.toPath().toAbsolutePath().normalize();
+                if (!destPath.startsWith(baseTargetPath)) {
                     throw new IOException("Bad zip entry (Zip Slip): " + name);
                 }
 

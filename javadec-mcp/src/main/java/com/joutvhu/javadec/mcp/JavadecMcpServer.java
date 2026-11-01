@@ -49,11 +49,12 @@ public class JavadecMcpServer {
         if (target == null || target.isBlank()) {
             throw new IllegalArgumentException("Either 'target' (e.g. 'library.jar!com/example/MyClass.class') or ('jarPath' and 'classPath') must be specified.");
         }
-        if (target.contains("!")) {
-            String[] parts = target.split("!", 2);
-            File jar = PathUtil.resolveFile(parts[0]);
+        int bangIdx = target.lastIndexOf('!');
+        if (bangIdx >= 0) {
+            String jarPath = target.substring(0, bangIdx);
+            File jar = PathUtil.resolveFile(jarPath);
             if (!jar.exists()) {
-                throw new FileNotFoundException("Archive file not found: " + parts[0]);
+                throw new FileNotFoundException("Archive file not found: " + jarPath);
             }
         } else {
             File f = PathUtil.resolveFile(target);
@@ -257,10 +258,10 @@ public class JavadecMcpServer {
                                 validateTarget(target);
 
                                 ClassOutline outline;
-                                if (target.contains("!")) {
-                                    String[] parts = target.split("!", 2);
-                                    File jar = PathUtil.resolveFile(parts[0]);
-                                    outline = DECOMPILER.getArchiveClassOutline(jar, parts[1]);
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    outline = DECOMPILER.getArchiveClassOutline(jar, target.substring(bangIdx + 1));
                                 } else {
                                     File file = PathUtil.resolveFile(target);
                                     outline = DECOMPILER.getClassOutline(file);
@@ -309,10 +310,10 @@ public class JavadecMcpServer {
                                         .build();
 
                                 String result;
-                                if (target.contains("!")) {
-                                    String[] parts = target.split("!", 2);
-                                    File jar = PathUtil.resolveFile(parts[0]);
-                                    result = DECOMPILER.decompileArchiveClass(jar, parts[1], options);
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.decompileArchiveClass(jar, target.substring(bangIdx + 1), options);
                                 } else {
                                     File file = PathUtil.resolveFile(target);
                                     result = DECOMPILER.decompileFile(file, options);
@@ -364,10 +365,10 @@ public class JavadecMcpServer {
                                         .build();
 
                                 String result;
-                                if (target.contains("!")) {
-                                    String[] parts = target.split("!", 2);
-                                    File jar = PathUtil.resolveFile(parts[0]);
-                                    result = DECOMPILER.decompileArchiveMethod(jar, parts[1], methodName, options);
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.decompileArchiveMethod(jar, target.substring(bangIdx + 1), methodName, options);
                                 } else {
                                     File f = PathUtil.resolveFile(target);
                                     result = DECOMPILER.decompileFileMethod(f, methodName, options);

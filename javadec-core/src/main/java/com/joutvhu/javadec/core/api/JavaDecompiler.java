@@ -122,8 +122,9 @@ public class JavaDecompiler {
                         File destJavaFile = new File(outputDir, javaFileName);
 
                         // Validate against Zip Slip
-                        Path destPath = destJavaFile.toPath().normalize();
-                        if (!destPath.startsWith(outputDir.toPath().normalize())) {
+                        Path destPath = destJavaFile.toPath().toAbsolutePath().normalize();
+                        Path baseOutputDir = outputDir.toPath().toAbsolutePath().normalize();
+                        if (!destPath.startsWith(baseOutputDir)) {
                             throw new IOException("Bad zip entry path: " + name);
                         }
 
@@ -141,8 +142,9 @@ public class JavaDecompiler {
 
                     // Copy resource file to output directory
                     File destResourceFile = new File(outputDir, cleanName);
-                    Path destPath = destResourceFile.toPath().normalize();
-                    if (!destPath.startsWith(outputDir.toPath().normalize())) {
+                    Path destPath = destResourceFile.toPath().toAbsolutePath().normalize();
+                    Path baseOutputDir = outputDir.toPath().toAbsolutePath().normalize();
+                    if (!destPath.startsWith(baseOutputDir)) {
                         throw new IOException("Bad zip entry path: " + name);
                     }
 
@@ -423,18 +425,18 @@ public class JavaDecompiler {
 
             // If a specific parameter signature was requested, filter by matching argument count/types
             if (hasParamHint) {
-                String hint = methodName.substring(methodName.indexOf('(') + 1, methodName.lastIndexOf(')')).replaceAll("\\s+", "");
+                String hint = methodName.substring(methodName.indexOf('(') + 1, methodName.lastIndexOf(')')).trim();
                 int openP = matchText.indexOf('(');
                 int closeP = matchText.lastIndexOf(')');
                 if (openP >= 0 && closeP > openP) {
                     String actualParams = matchText.substring(openP + 1, closeP);
-                    String[] hintTypes = hint.isEmpty() ? new String[0] : hint.split(",");
-                    String[] actualParamDecls = actualParams.trim().isEmpty() ? new String[0] : actualParams.split(",");
-                    if (hintTypes.length == actualParamDecls.length) {
+                    List<String> hintTypes = splitTopLevelCommas(hint);
+                    List<String> actualParamDecls = splitTopLevelCommas(actualParams);
+                    if (hintTypes.size() == actualParamDecls.size()) {
                         boolean allTypesMatch = true;
-                        for (int k = 0; k < hintTypes.length; k++) {
-                            String hType = hintTypes[k].trim();
-                            if (!actualParamDecls[k].trim().contains(hType)) {
+                        for (int k = 0; k < hintTypes.size(); k++) {
+                            String hType = hintTypes.get(k).trim();
+                            if (!actualParamDecls.get(k).contains(hType)) {
                                 allTypesMatch = false;
                                 break;
                             }
@@ -453,5 +455,49 @@ public class JavaDecompiler {
             return "// Method '" + methodName + "' not found in decompiled source.";
         }
         return String.join("\n\n", matchedMethods);
+    }
+
+    /**
+     * Splits a parameter string by top-level commas, respecting nested parentheses,
+     * generic angle brackets <...>, array brackets [...], and string literals.
+     */
+    private static List<String> splitTopLevelCommas(String s) {
+        List<String> result = new ArrayList<>();
+        if (s == null || s.trim().isEmpty()) {
+            return result;
+        }
+
+        int depthParen = 0;
+        int depthAngle = 0;
+        int depthBracket = 0;
+        boolean inStr = false;
+        int start = 0;
+
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '"' && !isEscaped(s, i)) {
+                inStr = !inStr;
+                continue;
+            }
+            if (!inStr) {
+                if (c == '(') depthParen++;
+                else if (c == ')') depthParen = Math.max(0, depthParen - 1);
+                else if (c == '<') depthAngle++;
+                else if (c == '>') depthAngle = Math.max(0, depthAngle - 1);
+                else if (c == '[') depthBracket++;
+                else if (c == ']') depthBracket = Math.max(0, depthBracket - 1);
+                else if (c == ',' && depthParen == 0 && depthAngle == 0 && depthBracket == 0) {
+                    result.add(s.substring(start, i).trim());
+                    start = i + 1;
+                }
+            }
+        }
+        if (start < s.length()) {
+            String remainder = s.substring(start).trim();
+            if (!remainder.isEmpty()) {
+                result.add(remainder);
+            }
+        }
+        return result;
     }
 }
