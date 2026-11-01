@@ -21,7 +21,8 @@ import java.util.zip.ZipFile;
 
 /**
  * Main JavaDecompiler entry point providing outline, selective decompilation,
- * resource inspection, pagination, archive extraction, and full source export capabilities.
+ * companion sources jar resolution (Javadoc/comment preservation), resource inspection,
+ * pagination, archive extraction, and full source export capabilities.
  */
 public class JavaDecompiler {
 
@@ -74,12 +75,6 @@ public class JavaDecompiler {
     /**
      * Decompiles all (or filtered) classes in an archive into .java files on disk,
      * maintaining package folder structures and copying non-class resources.
-     *
-     * @param archiveFile the JAR/ZIP file to decompile
-     * @param outputDir   target directory to write decompiled source files
-     * @param pathFilter  optional package or path filter (e.g. com/example/service)
-     * @param options     decompilation options (e.g. line numbers, engine)
-     * @return summary of exported classes and resources
      */
     public ExportResult exportArchive(File archiveFile, File outputDir, String pathFilter, DecompileOptions options) throws IOException {
         if (!outputDir.exists()) {
@@ -190,12 +185,23 @@ public class JavaDecompiler {
     }
 
     /**
-     * Decompiles a class entry directly from a jar/zip archive without disk extraction,
-     * with archive context for inner class resolution and line pagination.
+     * Decompiles or resolves original Java source code with Javadoc.
+     * Automatically inspects companion `-sources.jar` if available; otherwise falls back to native decompilation.
      */
     public String decompileArchiveClass(File archiveFile, String classPath, DecompileOptions options) throws IOException {
-        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+
+        // 1. Check for companion -sources.jar to retrieve original Javadoc and comments
+        File sourcesJar = ZipBytecodeLoader.findCompanionSourcesJar(archiveFile);
+        if (sourcesJar != null) {
+            String originalSource = ZipBytecodeLoader.readSourceFromSourcesJar(sourcesJar, classPath);
+            if (originalSource != null && !originalSource.isBlank()) {
+                return ZipBytecodeLoader.paginateLines(originalSource, opts.lineOffset(), opts.lineLimit());
+            }
+        }
+
+        // 2. Fall back to native decompiler
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
         String fullSource;
         if (defaultEngine instanceof CfrDecompilerEngine cfrEngine) {
             fullSource = cfrEngine.decompileWithContext(classPath, bytes, archiveFile, null, opts);
@@ -231,18 +237,13 @@ public class JavaDecompiler {
     }
 
     /**
-     * Decompiles and extracts only the specified method from an archive class.
+     * Decompiles and extracts only the specified method from an archive class,
+     * preserving original Javadoc and comments if a companion `-sources.jar` is present.
      */
     public String decompileArchiveMethod(File archiveFile, String classPath, String methodName, DecompileOptions options) throws IOException {
-        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
-        DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
-        String fullSource;
-        if (defaultEngine instanceof CfrDecompilerEngine cfrEngine) {
-            fullSource = cfrEngine.decompileWithContext(classPath, bytes, archiveFile, null, opts);
-        } else {
-            fullSource = defaultEngine.decompile(classPath, bytes, opts);
-        }
+        String fullSource = decompileArchiveClass(archiveFile, classPath, options);
         String extracted = extractMethodFromSource(fullSource, methodName);
+        DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
         return ZipBytecodeLoader.paginateLines(extracted, opts.lineOffset(), opts.lineLimit());
     }
 

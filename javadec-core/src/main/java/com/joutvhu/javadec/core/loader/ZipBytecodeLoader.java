@@ -12,7 +12,8 @@ import java.util.zip.ZipFile;
 
 /**
  * High-performance reader and extractor for JAR/ZIP archives and in-memory bytecode/resources.
- * Natively supports standard JARs, Spring Boot executable fat JARs (BOOT-INF/classes), and WARs (WEB-INF/classes).
+ * Natively supports standard JARs, Spring Boot executable fat JARs (BOOT-INF/classes), WARs (WEB-INF/classes),
+ * and Companion Sources JARs (-sources.jar) for reading original Javadoc and comments.
  */
 public class ZipBytecodeLoader {
 
@@ -89,6 +90,100 @@ public class ZipBytecodeLoader {
 
             throw new IOException("Class not found: " + classPath + " in archive: " + archiveFile.getAbsolutePath());
         }
+    }
+
+    /**
+     * Attempts to find a companion `-sources.jar` located alongside the binary JAR
+     * (e.g. in Maven repository or Gradle cache).
+     *
+     * @param archiveFile the binary jar file
+     * @return the companion sources jar file, or null if not found
+     */
+    public static File findCompanionSourcesJar(File archiveFile) {
+        if (archiveFile == null || !archiveFile.exists() || !archiveFile.isFile()) {
+            return null;
+        }
+
+        String name = archiveFile.getName();
+        if (name.endsWith("-sources.jar")) {
+            return archiveFile;
+        }
+
+        File parent = archiveFile.getParentFile();
+        if (parent == null || !parent.exists()) {
+            return null;
+        }
+
+        if (name.endsWith(".jar")) {
+            String base = name.substring(0, name.length() - 4);
+            // 1. Check <name>-sources.jar in the same directory (standard Maven convention)
+            File companion = new File(parent, base + "-sources.jar");
+            if (companion.exists() && companion.isFile()) {
+                return companion;
+            }
+
+            // 2. Check Gradle cache structure where files-2.1/<group>/<artifact>/<version>/<hash>/ may have sibling hashes
+            File versionDir = parent.getParentFile();
+            if (versionDir != null && "modules-2".equals(versionDir.getParentFile() != null ? versionDir.getParentFile().getName() : "")) {
+                File[] hashDirs = versionDir.listFiles(File::isDirectory);
+                if (hashDirs != null) {
+                    for (File h : hashDirs) {
+                        File candidate = new File(h, base + "-sources.jar");
+                        if (candidate.exists() && candidate.isFile()) {
+                            return candidate;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Reads original Java source code (with Javadoc and comments intact) from companion sources jar.
+     *
+     * @param sourcesJar sources JAR file
+     * @param classPath  class path (e.g. org/example/MyService.class or MyService.java)
+     * @return source code with Javadoc, or null if entry not found
+     */
+    public static String readSourceFromSourcesJar(File sourcesJar, String classPath) {
+        if (sourcesJar == null || !sourcesJar.exists()) return null;
+
+        String clean = classPath.replace('\\', '/').replaceAll("^/+", "");
+        if (clean.endsWith(".class")) {
+            clean = clean.substring(0, clean.length() - 6);
+        } else if (clean.endsWith(".java")) {
+            clean = clean.substring(0, clean.length() - 5);
+        }
+
+        // Top-level class name (strip inner class suffix if any, since inner classes live inside outer .java file)
+        int dollarIdx = clean.indexOf('$');
+        String topLevelClean = dollarIdx > 0 ? clean.substring(0, dollarIdx) : clean;
+        String javaEntryPath = topLevelClean.replace('.', '/') + ".java";
+
+        try (ZipFile zip = new ZipFile(sourcesJar)) {
+            ZipEntry entry = zip.getEntry(javaEntryPath);
+            if (entry == null) {
+                // Case-insensitive lookup
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry e = entries.nextElement();
+                    if (e.getName().equalsIgnoreCase(javaEntryPath)) {
+                        entry = e;
+                        break;
+                    }
+                }
+            }
+
+            if (entry != null) {
+                try (InputStream is = zip.getInputStream(entry)) {
+                    return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
+        } catch (IOException ignored) {}
+
+        return null;
     }
 
     /**

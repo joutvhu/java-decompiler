@@ -1,11 +1,11 @@
 ---
 name: "javadec"
-description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar, dump jar, export jar."
+description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar, dump jar, export jar, javadoc, sources jar."
 ---
 
 # Javadec - Java Bytecode & Archive Inspector for AI Agents
 
-`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It avoids dumping huge source files by offering compact tree views with customizable root path/depth, zero-extraction resource reading with line pagination, class outlines (skeletons), selective method-level decompilation, and full archive decompilation/export to `.java` files on disk.
+`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It features automatic Companion Sources JAR resolution (reading original Javadocs and comments when available), compact tree views with customizable path/depth, zero-extraction resource reading with line pagination, class outlines (skeletons), selective method decompilation, and full archive export to `.java` files on disk.
 
 ---
 
@@ -26,10 +26,10 @@ Never decompile an entire JAR or huge class file without inspecting outlines or 
        │       Read signatures, interfaces, fields, and annotations (~90% token savings)
        │
        ├──► 4. Method View: decompile_method / javadec view -m <method> [--offset <o>] [--limit <l>]
-       │       Decompile only the implementation logic of the target method
+       │       Extract target method implementation (with Javadoc if -sources.jar exists)
        │
        ├──► 5. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
-       │       Fallback only when cross-method flow or complete class structure is required
+       │       Auto-resolves companion -sources.jar for Javadocs, or falls back to native decompiler
        │
        └──► 6. Export to Disk: export_archive / javadec dump -o <outputDir> [-p <filter>]
                Export all decompiled .java source files and resources into a directory on disk
@@ -37,7 +37,16 @@ Never decompile an entire JAR or huge class file without inspecting outlines or 
 
 ---
 
-## 2. Tool Execution Modes
+## 2. Javadoc & Original Comments Resolution
+
+Bytecode `.class` files do not store comments or Javadoc. However, `javadec` features **Sources-Aware Inspection**:
+- When given a binary JAR (e.g. `~/.m2/.../spring-core-6.1.0.jar`), `javadec` automatically checks for a companion `spring-core-6.1.0-sources.jar` in the same directory (or Gradle cache).
+- If present, `javadec` reads the original author's `.java` file directly $\rightarrow$ **100% of Javadocs and inline comments are preserved**!
+- If absent, `javadec` falls back seamlessly to the native decompiler engine.
+
+---
+
+## 3. Tool Execution Modes
 
 Determine which execution mode is available in the current session:
 
@@ -47,8 +56,8 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `read_jar_resource(jarPath, resourcePath, lineOffset?, lineLimit?)` — resource reader with line pagination
 - `list_jar_classes(jarPath, pattern?)` — search classes (supports `com.example` and `com/example`)
 - `get_class_outline(target)` — lightweight skeleton/signatures (~90% token savings)
-- `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads
-- `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination
+- `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads (with Javadoc if available)
+- `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination (with Javadoc if available)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
 - `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
@@ -67,7 +76,7 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 
 ---
 
-## 3. Target URI Format
+## 4. Target URI Format
 
 When addressing a class, use the standard target URI syntax:
 - **Class inside JAR archive**: `<path/to/archive.jar>!<internal/package/ClassName.class>`  
@@ -81,7 +90,7 @@ When addressing a class, use the standard target URI syntax:
 
 ---
 
-## 4. Workflows & Command Reference
+## 5. Workflows & Command Reference
 
 ### Workflow A: Explore an Unfamiliar JAR with Scoped Tree
 1. **Get High-Level or Scoped Archive Tree**:
@@ -99,14 +108,14 @@ When addressing a class, use the standard target URI syntax:
 
 ---
 
-### Workflow B: Investigate Stack Traces & Method Contracts
+### Workflow B: Investigate Stack Traces & Method Contracts (with Javadoc)
 1. **Extract Class Outline (Skeleton)**:
    Always inspect outline first to verify field definitions and method signatures:
    - MCP: `get_class_outline({ "target": "lib.jar!com/example/AuthManager.class" })`
    - CLI: `javadec outline lib.jar!com/example/AuthManager.class`
 
-2. **Decompile Only the Problematic Method (All Overloads)**:
-   Extract the exact logic of the method identified from the stack trace:
+2. **Inspect Target Method Implementation (with Original Javadoc if Sources JAR exists)**:
+   Extract the exact logic and Javadoc documentation of the method:
    - MCP: `decompile_method({ "target": "lib.jar!com/example/AuthManager.class", "methodName": "authenticate" })`
    - CLI: `javadec view lib.jar!com/example/AuthManager.class -m authenticate`
 
@@ -131,7 +140,7 @@ When files need to be unpacked to disk as-is:
 
 ---
 
-## 5. Locating Dependencies on the System
+## 6. Locating Dependencies on the System
 
 When searching for JAR files mentioned in project pom.xml or build.gradle:
 - **Maven Local Repository**:
