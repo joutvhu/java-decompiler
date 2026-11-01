@@ -33,7 +33,7 @@ public record ArchiveTree(
         TreeNode root = new TreeNode("");
 
         for (Map.Entry<String, Long> entry : entries.entrySet()) {
-            String path = entry.getKey();
+            String path = entry.getKey().replace('\\', '/');
             if (path.endsWith("/")) continue;
 
             // Filter by subPath if specified
@@ -55,7 +55,7 @@ public record ArchiveTree(
                 resourceCount++;
                 if (path.startsWith("META-INF/") || path.endsWith(".yml") || path.endsWith(".yaml")
                         || path.endsWith(".properties") || path.endsWith(".xml") || path.endsWith(".json")
-                        || path.endsWith(".sql") || path.endsWith(".proto")) {
+                        || path.endsWith(".sql") || path.endsWith(".proto") || path.endsWith(".jar")) {
                     resources.add(path);
                 }
             }

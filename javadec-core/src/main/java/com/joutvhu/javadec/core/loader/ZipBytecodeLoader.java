@@ -60,7 +60,16 @@ public class ZipBytecodeLoader {
     }
 
     public static byte[] loadClassBytes(File archiveFile, String classPath) throws IOException {
-        String cleanPath = classPath.replace('\\', '/');
+        String cleanPath = classPath.replace('\\', '/').replaceAll("^/+", "");
+
+        // Strip pre-existing Spring Boot / WAR prefix to avoid doubling prefix during lookups
+        for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+            if (!prefix.isEmpty() && cleanPath.startsWith(prefix)) {
+                cleanPath = cleanPath.substring(prefix.length());
+                break;
+            }
+        }
+
         if (cleanPath.endsWith(".class")) {
             cleanPath = cleanPath.substring(0, cleanPath.length() - 6);
         } else if (cleanPath.endsWith(".java")) {
@@ -160,6 +169,15 @@ public class ZipBytecodeLoader {
         if (sourcesJar == null || !sourcesJar.exists()) return null;
 
         String clean = classPath.replace('\\', '/').replaceAll("^/+", "");
+
+        // Strip Spring Boot / WAR prefixes if passed from a fat jar
+        for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+            if (!prefix.isEmpty() && clean.startsWith(prefix)) {
+                clean = clean.substring(prefix.length());
+                break;
+            }
+        }
+
         if (clean.endsWith(".class")) {
             clean = clean.substring(0, clean.length() - 6);
         } else if (clean.endsWith(".java")) {
@@ -188,7 +206,11 @@ public class ZipBytecodeLoader {
 
             if (entry != null) {
                 try (InputStream is = zip.getInputStream(entry)) {
-                    return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                    String src = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                    if (src.startsWith("\uFEFF")) {
+                        src = src.substring(1);
+                    }
+                    return src;
                 }
             }
         } catch (IOException ignored) {}
@@ -202,6 +224,14 @@ public class ZipBytecodeLoader {
      */
     public static String readResourceText(File archiveFile, String resourcePath, Integer lineOffset, Integer lineLimit) throws IOException {
         String normalized = resourcePath.replace('\\', '/').replaceAll("^/+", "");
+
+        // Strip pre-existing Spring Boot / WAR prefix to avoid doubling prefix
+        for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+            if (!prefix.isEmpty() && normalized.startsWith(prefix)) {
+                normalized = normalized.substring(prefix.length());
+                break;
+            }
+        }
 
         // Binary extension check to protect AI context window
         String lower = normalized.toLowerCase();
@@ -249,6 +279,9 @@ public class ZipBytecodeLoader {
             String fullText;
             try (InputStream is = zipFile.getInputStream(entry)) {
                 fullText = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                if (fullText.startsWith("\uFEFF")) {
+                    fullText = fullText.substring(1);
+                }
             }
 
             return paginateLines(fullText, lineOffset, lineLimit);
@@ -323,11 +356,13 @@ public class ZipBytecodeLoader {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
 
-                if (filter != null && !name.startsWith(filter) && !name.contains(filter)) {
+                String safeName = name.replace('\\', '/').replaceAll("^/+", "");
+
+                if (filter != null && !safeName.startsWith(filter) && !safeName.contains(filter)) {
                     continue;
                 }
 
-                File destFile = new File(targetDir, name);
+                File destFile = new File(targetDir, safeName);
                 // Security check against zip-slip vulnerability
                 Path destPath = destFile.toPath().normalize();
                 if (!destPath.startsWith(targetDir.toPath().normalize())) {
