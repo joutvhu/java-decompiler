@@ -44,6 +44,7 @@
   "files": [
     "bin/",
     "jars/",
+    "skills/",
     "README.md",
     "LICENSE"
   ]

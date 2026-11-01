@@ -10,6 +10,8 @@ const submodulePoms = [
     path.join(rootDir, 'javadec-cli', 'pom.xml'),
     path.join(rootDir, 'javadec-mcp', 'pom.xml')
 ];
+const cliJavaPath = path.join(rootDir, 'javadec-cli', 'src', 'main', 'java', 'com', 'joutvhu', 'javadec', 'cli', 'JavadecCli.java');
+const mcpJavaPath = path.join(rootDir, 'javadec-mcp', 'src', 'main', 'java', 'com', 'joutvhu', 'javadec', 'mcp', 'JavadecMcpServer.java');
 
 function parseSemver(v) {
     const match = v.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/);
@@ -63,6 +65,14 @@ function updateSubmodulePom(filePath, newVersion) {
     fs.writeFileSync(filePath, updated, 'utf8');
 }
 
+function updateJavaFile(filePath, regex, replacement) {
+    if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const updated = content.replace(regex, replacement);
+        fs.writeFileSync(filePath, updated, 'utf8');
+    }
+}
+
 function main() {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const currentVersion = pkg.version;
@@ -98,18 +108,25 @@ function main() {
         console.log(`- Updated ${relPath}`);
     }
 
-    // 3. Stage changes in git if git repository is active
+    // 3. Update JavadecCli.java and JavadecMcpServer.java version strings
+    updateJavaFile(cliJavaPath, /version\s*=\s*"javadec\s+[^"]+"/, `version = "javadec ${targetVersion}"`);
+    updateJavaFile(mcpJavaPath, /\.serverInfo\("javadec-mcp",\s*"[^"]+"\)/, `.serverInfo("javadec-mcp", "${targetVersion}")`);
+    console.log(`- Updated Java CLI and MCP Server version strings`);
+
+    // 4. Stage changes in git if git repository is active
     try {
         const filesToStage = [
             'package.json',
             'pom.xml',
-            ...submodulePoms.map(p => path.relative(rootDir, p))
+            ...submodulePoms.map(p => path.relative(rootDir, p)),
+            path.relative(rootDir, cliJavaPath),
+            path.relative(rootDir, mcpJavaPath)
         ];
         execSync(`git add ${filesToStage.join(' ')}`, { cwd: rootDir, stdio: 'ignore' });
         console.log(`- Staged version changes in git`);
     } catch (e) {}
 
-    console.log(`\n[SUCCESS] Synchronized version ${targetVersion} across package.json and all POM files.\n`);
+    console.log(`\n[SUCCESS] Synchronized version ${targetVersion} across package.json, POMs, and Java classes.\n`);
 }
 
 main();
