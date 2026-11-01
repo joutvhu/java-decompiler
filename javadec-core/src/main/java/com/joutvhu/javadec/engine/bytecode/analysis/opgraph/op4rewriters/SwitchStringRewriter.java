@@ -198,18 +198,21 @@ public class SwitchStringRewriter implements Op04Rewriter {
         while (mi.hasNext()) {
             mi.advance();
             matchResultCollector.clear();
-            if (m.match(mi, matchResultCollector)) {
-                if (!isLVOk(matchResultCollector.verify, matchResultCollector.lvalue, matchResultCollector.getStatementByName("ass1"))) continue;
-                StructuredSwitch firstSwitch = (StructuredSwitch) matchResultCollector.getStatementByName("switch1");
-                StructuredSwitch secondSwitch = (StructuredSwitch) matchResultCollector.getStatementByName("switch2");
-                if (!secondSwitch.isSafeExpression()) continue;
+            try {
+                if (m.match(mi, matchResultCollector)) {
+                    if (!isLVOk(matchResultCollector.verify, matchResultCollector.lvalue, matchResultCollector.getStatementByName("ass1"))) continue;
+                    StructuredSwitch firstSwitch = (StructuredSwitch) matchResultCollector.getStatementByName("switch1");
+                    StructuredSwitch secondSwitch = (StructuredSwitch) matchResultCollector.getStatementByName("switch2");
+                    if (!secondSwitch.isSafeExpression()) continue;
 
-                StructuredSwitch replacement = rewriteSwitch(secondSwitch, matchResultCollector);
-                secondSwitch.getContainer().replaceStatement(replacement);
-                firstSwitch.getContainer().nopOut();
-                matchResultCollector.getStatementByName("ass1").getContainer().nopOut();
-                matchResultCollector.getStatementByName("ass2").getContainer().nopOut();
-                mi.rewind1();
+                    StructuredSwitch replacement = rewriteSwitch(secondSwitch, matchResultCollector);
+                    secondSwitch.getContainer().replaceStatement(replacement);
+                    firstSwitch.getContainer().nopOut();
+                    matchResultCollector.getStatementByName("ass1").getContainer().nopOut();
+                    matchResultCollector.getStatementByName("ass2").getContainer().nopOut();
+                    mi.rewind1();
+                }
+            } catch (TooOptimisticMatchException | FailedRewriteException ignored) {
             }
         }
     }

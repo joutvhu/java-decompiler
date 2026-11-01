@@ -26,13 +26,17 @@ public class CfrDecompilerEngine implements DecompilerEngine {
 
     @Override
     public String decompile(String className, byte[] bytecode, DecompileOptions options) {
-        return decompileWithContext(className, bytecode, null, null, options);
+        return decompileWithContext(className, bytecode, null, null, null, options);
+    }
+
+    public String decompileWithContext(String className, byte[] bytecode, File archiveFile, File baseDir, DecompileOptions options) {
+        return decompileWithContext(className, bytecode, archiveFile, baseDir, null, options);
     }
 
     /**
-     * Decompiles a class with optional archive file context or folder context for resolving inner/anonymous classes.
+     * Decompiles a class with optional archive file context, folder context, or in-memory classes for resolving inner/anonymous classes.
      */
-    public String decompileWithContext(String className, byte[] bytecode, File archiveFile, File baseDir, DecompileOptions options) {
+    public String decompileWithContext(String className, byte[] bytecode, File archiveFile, File baseDir, Map<String, byte[]> inMemoryClasses, DecompileOptions options) {
         String cleanName = className.replace('\\', '/').replaceAll("^/+", "");
         if (cleanName.endsWith(".class")) {
             cleanName = cleanName.substring(0, cleanName.length() - 6);
@@ -41,7 +45,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         }
         String classPath = cleanName.replace('.', '/') + ".class";
 
-        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile, baseDir);
+        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile, baseDir, inMemoryClasses);
         MemoryOutputSinkFactory sinkFactory = new MemoryOutputSinkFactory();
 
         Map<String, String> cfrOptions = new HashMap<>();
@@ -72,12 +76,14 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         private final byte[] bytecode;
         private final File archiveFile;
         private final File baseDir;
+        private final Map<String, byte[]> inMemoryClasses;
 
-        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile, File baseDir) {
+        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile, File baseDir, Map<String, byte[]> inMemoryClasses) {
             this.classPath = classPath;
             this.bytecode = bytecode;
             this.archiveFile = archiveFile;
             this.baseDir = baseDir;
+            this.inMemoryClasses = inMemoryClasses;
         }
 
         @Override
@@ -120,6 +126,22 @@ public class CfrDecompilerEngine implements DecompilerEngine {
                 File simpleCandidate = new File(baseDir, simpleFileName);
                 if (simpleCandidate.exists() && simpleCandidate.isFile()) {
                     return Pair.make(Files.readAllBytes(simpleCandidate.toPath()), simpleCandidate.getName());
+                }
+            }
+
+            // 3. Resolve from in-memory classes map if available
+            if (inMemoryClasses != null) {
+                byte[] inMem = inMemoryClasses.get(normalizedRequested);
+                if (inMem == null) {
+                    inMem = inMemoryClasses.get(normalizedRequested.replace('/', '.').replaceAll("\\.class$", ""));
+                }
+                if (inMem == null) {
+                    int lastSlash = normalizedRequested.lastIndexOf('/');
+                    String simpleName = lastSlash >= 0 ? normalizedRequested.substring(lastSlash + 1) : normalizedRequested;
+                    inMem = inMemoryClasses.get(simpleName.replaceAll("\\.class$", ""));
+                }
+                if (inMem != null) {
+                    return Pair.make(inMem, normalizedRequested);
                 }
             }
 

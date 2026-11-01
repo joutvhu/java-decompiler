@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -188,8 +189,20 @@ public class JavaDecompiler {
      * Decompiles complete class source code from bytecode bytes with line pagination support.
      */
     public String decompile(String className, byte[] bytecode, DecompileOptions options) {
+        return decompile(className, bytecode, null, options);
+    }
+
+    /**
+     * Decompiles complete class source code with in-memory sibling/inner classes map.
+     */
+    public String decompile(String className, byte[] bytecode, Map<String, byte[]> additionalClasses, DecompileOptions options) {
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
-        String fullSource = defaultEngine.decompile(className, bytecode, opts);
+        String fullSource;
+        if (defaultEngine instanceof CfrDecompilerEngine cfrEngine) {
+            fullSource = cfrEngine.decompileWithContext(className, bytecode, null, null, additionalClasses, opts);
+        } else {
+            fullSource = defaultEngine.decompile(className, bytecode, opts);
+        }
         return ZipBytecodeLoader.paginateLines(fullSource, opts.lineOffset(), opts.lineLimit());
     }
 
