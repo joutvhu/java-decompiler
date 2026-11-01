@@ -119,6 +119,53 @@ public class BytecodeReferenceScannerTest {
     }
 
     @Test
+    public void testFindMethodReferenceAndClassLiteral(@TempDir Path tempDir) throws Exception {
+        String targetSrc = """
+                package com.example;
+                public class TargetService {
+                    public void process(String msg) {}
+                }
+                """;
+
+        String callerSrc = """
+                package com.example;
+                import java.util.List;
+                public class Invoker {
+                    public void execute(List<String> list, TargetService svc) {
+                        list.forEach(svc::process);
+                        Class<?> c = TargetService.class;
+                    }
+                }
+                """;
+
+        Map<String, byte[]> classes = TestCompiler.compile(Map.of(
+                "com.example.TargetService", targetSrc,
+                "com.example.Invoker", callerSrc
+        ));
+
+        File jar = tempDir.resolve("dyn-test.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            for (var entry : classes.entrySet()) {
+                zos.putNextEntry(new ZipEntry(entry.getKey().replace('.', '/') + ".class"));
+                zos.write(entry.getValue());
+                zos.closeEntry();
+            }
+        }
+
+        // 1. Method reference detection (TargetService::process via invokedynamic)
+        ReferenceSearchResult resMethod = BytecodeReferenceScanner.scanArchive(jar, "TargetService#process", 10, null);
+        assertEquals(1, resMethod.totalFound());
+        assertEquals(ReferenceKind.METHOD_CALL, resMethod.references().get(0).kind());
+        assertTrue(resMethod.references().get(0).targetDetails().contains("TargetService::process"));
+
+        // 2. Class search (should find method reference + class literal TargetService.class)
+        ReferenceSearchResult resClass = BytecodeReferenceScanner.scanArchive(jar, "com.example.TargetService", 10, null);
+        assertTrue(resClass.totalFound() >= 2);
+        boolean hasLiteral = resClass.references().stream().anyMatch(r -> r.targetDetails().contains("TargetService.class"));
+        assertTrue(hasLiteral);
+    }
+
+    @Test
     public void testQueryTargetParsing() {
         var t1 = BytecodeReferenceScanner.QueryTarget.parse("com.example.Service#doWork");
         assertEquals("com/example/Service", t1.owner);

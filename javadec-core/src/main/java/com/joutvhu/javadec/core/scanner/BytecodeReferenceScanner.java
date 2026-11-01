@@ -135,6 +135,16 @@ public class BytecodeReferenceScanner {
         }
 
         @Override
+        public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            if (target.isClassSearch() && results.size() < limit) {
+                if (descriptorContainsClass(descriptor, target.owner)) {
+                    results.add(new ReferenceItem(currentClassName, null, null, null, ReferenceKind.TYPE_USAGE, "Annotation: " + descriptor));
+                }
+            }
+            return null;
+        }
+
+        @Override
         public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
             if (target.isClassSearch() && results.size() < limit) {
                 if (descriptorContainsClass(descriptor, target.owner)) {
@@ -232,6 +242,40 @@ public class BytecodeReferenceScanner {
                     default -> ReferenceKind.TYPE_USAGE;
                 };
                 results.add(new ReferenceItem(sourceClass, sourceMethod, sourceMethodDesc, currentLine, kind, type.replace('/', '.')));
+            }
+        }
+
+        @Override
+        public void visitInvokeDynamicInsn(String name, String descriptor, Handle bootstrapMethodHandle, Object... bootstrapMethodArguments) {
+            if (results.size() >= limit) return;
+
+            if (bootstrapMethodArguments != null) {
+                for (Object bsmArg : bootstrapMethodArguments) {
+                    if (bsmArg instanceof Handle handle) {
+                        String handleOwner = handle.getOwner();
+                        String handleName = handle.getName();
+                        String handleDesc = handle.getDesc();
+
+                        if (target.matchesMethod(handleOwner, handleName)) {
+                            ReferenceKind kind = handleName.equals("<init>") ? ReferenceKind.INSTANTIATION : ReferenceKind.METHOD_CALL;
+                            String targetDisplay = handleOwner.replace('/', '.') + "::" + handleName + handleDesc;
+                            results.add(new ReferenceItem(sourceClass, sourceMethod, sourceMethodDesc, currentLine, kind, targetDisplay));
+                        } else if (target.isClassSearch() && target.matchesClass(handleOwner)) {
+                            ReferenceKind kind = handleName.equals("<init>") ? ReferenceKind.INSTANTIATION : ReferenceKind.METHOD_CALL;
+                            String targetDisplay = handleOwner.replace('/', '.') + "::" + handleName + handleDesc;
+                            results.add(new ReferenceItem(sourceClass, sourceMethod, sourceMethodDesc, currentLine, kind, targetDisplay));
+                        }
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void visitLdcInsn(Object value) {
+            if (results.size() >= limit) return;
+
+            if (value instanceof Type t && target.isClassSearch() && target.matchesClass(t.getInternalName())) {
+                results.add(new ReferenceItem(sourceClass, sourceMethod, sourceMethodDesc, currentLine, ReferenceKind.TYPE_USAGE, "Literal: " + t.getClassName() + ".class"));
             }
         }
     }

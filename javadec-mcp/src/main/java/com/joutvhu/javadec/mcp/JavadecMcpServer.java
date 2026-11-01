@@ -30,6 +30,38 @@ public class JavadecMcpServer {
 
     private static final JavaDecompiler DECOMPILER = new JavaDecompiler();
 
+    private static final String SERVER_TITLE = "Java Decompiler & Archive Inspector";
+
+    private static final String SERVER_DESCRIPTION =
+            "Universal & Token-Efficient Java Bytecode, Resource, and Archive Inspector for AI agents";
+
+    private static final String SERVER_INSTRUCTIONS =
+            """
+            Universal & Token-Efficient Java Bytecode, Resource, and Archive Inspector.
+            Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, finding method/class callers and references, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode.
+
+            ## Token-First Operating Strategy
+            Never decompile an entire JAR or huge class file without inspecting outlines or scoping the tree first. Follow this progressive hierarchy:
+            1. inspect_archive_tree: Scoped hierarchy view of packages, class counts, and key configs before diving in.
+            2. read_jar_resource: Read non-class config files (.yml, .properties, .xml, MANIFEST.MF) with line pagination (lineOffset, lineLimit).
+            3. get_class_outline: Extract class skeleton/signatures to inspect APIs with minimal token usage (~90% token savings). Always prefer outline first before full decompilation.
+            4. find_references: Instant bytecode scanner to find all callers, field accesses, or class usages with line numbers without decompiling.
+            5. decompile_method: Selectively decompile only a single method and its overloads (with original Javadoc if companion -sources.jar exists).
+            6. decompile_class: Decompile full class source code (auto-resolves -sources.jar for comments/Javadoc, supports lineOffset and lineLimit for large classes).
+            7. export_archive: Decompile entire archive into .java files on disk maintaining package structure.
+            8. extract_archive: Extract raw bytecode or resources to disk.
+
+            ## Target URI Format
+            - Class inside JAR archive: "<path/to/archive.jar>!<internal/package/ClassName.class>" (e.g. "~/.m2/repository/.../spring-core-6.1.0.jar!org/springframework/core/io/Resource.class")
+            - Or use separate parameters: jarPath and classPath
+            - Standalone .class file: "<path/to/ClassName.class>" (e.g. "target/classes/com/example/MyClass.class")
+
+            ## Locating Dependencies
+            - Maven local repository: ~/.m2/repository/<group/as/path>/<artifact>/<version>/<artifact>-<version>.jar
+            - Gradle cache: ~/.gradle/caches/modules-2/files-2.1/<group>/<artifact>/<version>/...
+            - Project build outputs: target/*.jar or build/libs/*.jar
+            """;
+
     static boolean isArchiveFile(String path) {
         if (path == null) return false;
         String lower = path.toLowerCase();
@@ -118,7 +150,12 @@ public class JavadecMcpServer {
                 new StdioServerTransportProvider(McpJsonDefaults.getMapper(), wrappedIn, System.out);
 
         McpSyncServer server = McpServer.sync(transportProvider)
-                .serverInfo("javadec-mcp", "1.0.0")
+                .serverInfo(McpSchema.Implementation.builder("javadec-mcp", "1.0.0")
+                        .title(SERVER_TITLE)
+                        .description(SERVER_DESCRIPTION)
+                        .websiteUrl("https://github.com/joutvhu/java-decompiler")
+                        .build())
+                .instructions(SERVER_INSTRUCTIONS)
                 .capabilities(McpSchema.ServerCapabilities.builder()
                         .tools(true)
                         .build())
