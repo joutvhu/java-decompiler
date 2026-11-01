@@ -2,6 +2,7 @@ package com.joutvhu.javadec.cli;
 
 import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
+import com.joutvhu.javadec.core.loader.PathUtil;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
 import com.joutvhu.javadec.core.model.ExportResult;
@@ -71,12 +72,13 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            if (!jarFile.exists()) {
-                System.err.println("Error: File not found: " + jarFile.getPath());
+            File jar = PathUtil.resolveFile(jarFile);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
                 return 1;
             }
             JavaDecompiler decompiler = new JavaDecompiler();
-            ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, path, depth);
+            ArchiveTree tree = decompiler.inspectArchiveTree(jar, path, depth);
             System.out.println(tree.formattedTree());
             return 0;
         }
@@ -92,12 +94,13 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            if (!jarFile.exists()) {
-                System.err.println("Error: File not found: " + jarFile.getPath());
+            File jar = PathUtil.resolveFile(jarFile);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
                 return 1;
             }
             JavaDecompiler decompiler = new JavaDecompiler();
-            List<String> classes = decompiler.listArchiveClasses(jarFile, pattern);
+            List<String> classes = decompiler.listArchiveClasses(jar, pattern);
             for (String cls : classes) {
                 System.out.println(cls);
             }
@@ -125,14 +128,14 @@ public class JavadecCli implements Callable<Integer> {
 
             if (resolvedTarget.contains("!")) {
                 String[] parts = resolvedTarget.split("!", 2);
-                File jar = new File(parts[0]);
+                File jar = PathUtil.resolveFile(parts[0]);
                 if (!jar.exists()) {
                     System.err.println("Error: Archive file not found: " + jar.getPath());
                     return 1;
                 }
                 outline = decompiler.getArchiveClassOutline(jar, parts[1]);
             } else {
-                File file = new File(resolvedTarget);
+                File file = PathUtil.resolveFile(resolvedTarget);
                 if (!file.exists()) {
                     System.err.println("Error: File not found: " + file.getPath());
                     return 1;
@@ -187,7 +190,7 @@ public class JavadecCli implements Callable<Integer> {
 
             if (resolvedTarget.contains("!")) {
                 String[] parts = resolvedTarget.split("!", 2);
-                File jar = new File(parts[0]);
+                File jar = PathUtil.resolveFile(parts[0]);
                 if (!jar.exists()) {
                     System.err.println("Error: Archive file not found: " + jar.getPath());
                     return 1;
@@ -202,7 +205,7 @@ public class JavadecCli implements Callable<Integer> {
                     System.out.println(result);
                 }
             } else {
-                File file = new File(resolvedTarget);
+                File file = PathUtil.resolveFile(resolvedTarget);
                 if (!file.exists()) {
                     System.err.println("Error: File not found: " + file.getPath());
                     return 1;
@@ -242,12 +245,13 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            if (!jarFile.exists()) {
-                System.err.println("Error: File not found: " + jarFile.getPath());
+            File jar = PathUtil.resolveFile(jarFile);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
                 return 1;
             }
             JavaDecompiler decompiler = new JavaDecompiler();
-            String content = decompiler.readArchiveResource(jarFile, resourcePath, offset, limit);
+            String content = decompiler.readArchiveResource(jar, resourcePath, offset, limit);
             System.out.println(content);
             return 0;
         }
@@ -269,13 +273,15 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            if (!jarFile.exists()) {
-                System.err.println("Error: File not found: " + jarFile.getPath());
+            File jar = PathUtil.resolveFile(jarFile);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
                 return 1;
             }
+            File outDir = PathUtil.resolveFile(outputDir);
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder().showLineNumbers(showLines).build();
-            ExportResult result = decompiler.exportArchive(jarFile, outputDir, pathFilter, options);
+            ExportResult result = decompiler.exportArchive(jar, outDir, pathFilter, options);
             System.out.println(result.toSummaryString());
             return 0;
         }
@@ -294,13 +300,15 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            if (!jarFile.exists()) {
-                System.err.println("Error: File not found: " + jarFile.getPath());
+            File jar = PathUtil.resolveFile(jarFile);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
                 return 1;
             }
+            File outDir = PathUtil.resolveFile(outputDir);
             JavaDecompiler decompiler = new JavaDecompiler();
-            int count = decompiler.extractArchive(jarFile, outputDir, pathFilter);
-            System.out.println("Extracted " + count + " file(s) to " + outputDir.getAbsolutePath());
+            int count = decompiler.extractArchive(jar, outDir, pathFilter);
+            System.out.println("Extracted " + count + " file(s) to " + outDir.getAbsolutePath());
             return 0;
         }
     }
