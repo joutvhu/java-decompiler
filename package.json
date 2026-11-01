@@ -10,10 +10,10 @@
     "start": "node bin/javadec.js",
     "mcp": "node bin/javadec.js mcp",
     "build": "node scripts/build.js",
+    "prepack": "npm run build",
     "publish:local": "node scripts/publish-local.js",
     "version": "node scripts/bump-version.js",
     "bump": "node scripts/bump-version.js",
-    "prepack": "npm run build",
     "test": "node bin/javadec.js --help"
   },
   "repository": {
