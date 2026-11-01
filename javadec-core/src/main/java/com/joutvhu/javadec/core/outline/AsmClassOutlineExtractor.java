@@ -25,7 +25,7 @@ import java.util.List;
 public class AsmClassOutlineExtractor {
 
     public static ClassOutline extract(byte[] bytecode) {
-        // Ensure compatibility with newer bytecode versions (e.g. Java 22-25) by patching version bytes for ASM reader
+        // Ensure compatibility with newer bytecode versions (e.g. Java 22-27+) by patching version bytes for ASM reader
         byte[] compatibleBytecode = bytecode;
         int originalMajorVersion = (bytecode != null && bytecode.length > 7)
                 ? (((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF))

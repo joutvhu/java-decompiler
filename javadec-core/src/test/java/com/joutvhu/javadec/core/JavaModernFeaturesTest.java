@@ -72,4 +72,37 @@ public class JavaModernFeaturesTest {
         assertTrue(decompiled.contains("Circle"));
         assertTrue(decompiled.contains("Square"));
     }
+
+    @Test
+    public void testJava27BytecodeDecompilationAndOutline() {
+        String source = """
+                package com.example.future;
+                public class Java27Demo {
+                    private final String version = "Java 27 preview";
+                    public String getMessage(String name) {
+                        return "Hello " + name + " from " + version;
+                    }
+                }
+                """;
+
+        Map<String, byte[]> classes = TestCompiler.compile("com.example.future.Java27Demo", source);
+        byte[] b27 = classes.get("com.example.future.Java27Demo").clone();
+        // Patch major version byte to 71 (Java 27)
+        b27[6] = 0;
+        b27[7] = 71;
+
+        // 1. Test Outline extraction with Java 27 bytecode
+        var outline = com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor.extract(b27);
+        assertEquals(71, outline.bytecodeMajorVersion());
+        String skeleton = outline.toSkeletonSource();
+        assertTrue(skeleton.contains("public class Java27Demo"));
+        assertTrue(skeleton.contains("public java.lang.String getMessage(java.lang.String name);"));
+
+        // 2. Test full decompilation with Java 27 bytecode
+        String decompiled = decompiler.decompile("com/example/future/Java27Demo", b27, DecompileOptions.defaults());
+        assertNotNull(decompiled);
+        assertTrue(decompiled.contains("class Java27Demo"));
+        assertTrue(decompiled.contains("getMessage"));
+        assertTrue(decompiled.contains("Hello "));
+    }
 }

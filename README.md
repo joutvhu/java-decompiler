@@ -319,7 +319,7 @@ java-decompiler/
 │   └── javadec-mcp.jar                   # Shaded fat-jar for MCP Server
 ├── javadec-core/                         # Core library
 │   ├── com.joutvhu.javadec.core.*        # Loader, Outline, Model, Decompiler Facade
-│   └── com.joutvhu.javadec.engine.*      # Native Decompiler Engine (Java 8 - 21+)
+│   └── com.joutvhu.javadec.engine.*      # Native Decompiler Engine (Java 8 - 27+)
 ├── javadec-cli/                          # Command Line Interface (Picocli)
 ├── javadec-mcp/                          # Model Context Protocol Server (MCP Java SDK)
 ├── scripts/

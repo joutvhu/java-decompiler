@@ -15,7 +15,7 @@ import java.nio.file.Files;
 import java.util.*;
 
 /**
- * Built-in native Java decompiler engine supporting modern Java bytecode (Java 8 to 21+).
+ * Built-in native Java decompiler engine supporting modern Java bytecode (Java 8 to 27+).
  */
 public class CfrDecompilerEngine implements DecompilerEngine {
 
