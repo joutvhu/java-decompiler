@@ -108,9 +108,10 @@ public class JavaDecompiler {
                 }
 
                 if (cleanName.endsWith(".class")) {
-                    // Skip anonymous or inner classes during top-level loop; CFR will inline them into outer class
+                    // Skip anonymous or member inner classes during top-level loop; CFR will inline them into outer class
+                    int lastSlash = cleanName.lastIndexOf('/');
                     int dollarIdx = cleanName.lastIndexOf('$');
-                    if (dollarIdx > 0 && dollarIdx > cleanName.lastIndexOf('/')) {
+                    if (dollarIdx > (lastSlash + 1)) {
                         continue;
                     }
 
@@ -132,6 +133,11 @@ public class JavaDecompiler {
                         failCount++;
                     }
                 } else {
+                    // Skip embedded fat-jar libraries from source export
+                    if (cleanName.endsWith(".jar")) {
+                        continue;
+                    }
+
                     // Copy resource file to output directory
                     File destResourceFile = new File(outputDir, cleanName);
                     Path destPath = destResourceFile.toPath().normalize();
@@ -249,13 +255,15 @@ public class JavaDecompiler {
 
     /**
      * Extracts method declaration(s), preceding annotations, and bodies from decompiled Java source text.
-     * Supports overloaded methods, constructors, interface/abstract methods, annotations, and CRLF line endings.
+     * Supports overloaded methods, constructors, interface/abstract methods, same-line annotations, and CRLF line endings.
      */
     public String extractMethodFromSource(String fullSource, String methodName) {
-        boolean hasParamHint = methodName.contains("(");
+        boolean hasParamHint = methodName.contains("(") && methodName.contains(")");
         String rawMethod = hasParamHint ? methodName.substring(0, methodName.indexOf('(')).trim() : methodName.trim();
         String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
-        Pattern pattern = Pattern.compile("(?m)^[ \\t]*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
+
+        // Pattern matching method header with support for annotations (same-line and preceding)
+        Pattern pattern = Pattern.compile("(?m)^[ \\t]*(?:@[\\w.]+(?:\\([^)]*\\))?\\s+)*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
         Matcher matcher = pattern.matcher(fullSource);
 
         List<String> matchedMethods = new ArrayList<>();
@@ -310,12 +318,28 @@ public class JavaDecompiler {
                 }
             }
 
-            // If a specific parameter signature was requested, check match
+            // If a specific parameter signature was requested, filter by matching argument count/types
             if (hasParamHint) {
-                String paramSignature = methodName.substring(methodName.indexOf('(')).replaceAll("\\s+", "");
-                String matchSignature = matcher.group().replaceAll("\\s+", "");
-                if (matchSignature.contains(paramSignature)) {
-                    return methodBlock;
+                String hint = methodName.substring(methodName.indexOf('(') + 1, methodName.lastIndexOf(')')).replaceAll("\\s+", "");
+                int openP = matcher.group().indexOf('(');
+                int closeP = matcher.group().lastIndexOf(')');
+                if (openP >= 0 && closeP > openP) {
+                    String actualParams = matcher.group().substring(openP + 1, closeP);
+                    String[] hintTypes = hint.isEmpty() ? new String[0] : hint.split(",");
+                    String[] actualParamDecls = actualParams.trim().isEmpty() ? new String[0] : actualParams.split(",");
+                    if (hintTypes.length == actualParamDecls.length) {
+                        boolean allTypesMatch = true;
+                        for (int k = 0; k < hintTypes.length; k++) {
+                            String hType = hintTypes[k].trim();
+                            if (!actualParamDecls[k].trim().contains(hType)) {
+                                allTypesMatch = false;
+                                break;
+                            }
+                        }
+                        if (allTypesMatch) {
+                            return methodBlock;
+                        }
+                    }
                 }
             }
 
