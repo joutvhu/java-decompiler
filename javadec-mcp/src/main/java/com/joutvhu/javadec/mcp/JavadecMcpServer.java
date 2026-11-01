@@ -12,7 +12,8 @@ import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.io.File;
-import java.nio.file.Files;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -40,12 +41,24 @@ public class JavadecMcpServer {
         return null;
     }
 
-    private static void validateTarget(String target) {
+    private static void validateTarget(String target) throws IOException {
         if (target == null || target.isBlank()) {
             throw new IllegalArgumentException("Either 'target' (e.g. 'library.jar!com/example/MyClass.class') or ('jarPath' and 'classPath') must be specified.");
         }
-        if (!target.contains("!") && isArchiveFile(target)) {
-            throw new IllegalArgumentException("Target '" + target + "' is an archive. Please specify a class inside the archive (e.g. target: '" + target + "!com/example/MyClass.class' or supply 'classPath').");
+        if (target.contains("!")) {
+            String[] parts = target.split("!", 2);
+            File jar = new File(parts[0]);
+            if (!jar.exists()) {
+                throw new FileNotFoundException("Archive file not found: " + parts[0]);
+            }
+        } else {
+            File f = new File(target);
+            if (!f.exists()) {
+                throw new FileNotFoundException("File not found: " + target);
+            }
+            if (isArchiveFile(target)) {
+                throw new IllegalArgumentException("Target '" + target + "' is an archive. Please specify a class inside the archive (e.g. target: '" + target + "!com/example/MyClass.class' or supply 'classPath').");
+            }
         }
     }
 
@@ -75,9 +88,14 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = new File(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
                                 String path = (String) request.arguments().get("path");
                                 Integer depth = request.arguments().get("depth") instanceof Number n ? n.intValue() : null;
-                                ArchiveTree tree = DECOMPILER.inspectArchiveTree(new File(jarPath), path, depth);
+                                ArchiveTree tree = DECOMPILER.inspectArchiveTree(jar, path, depth);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(tree.formattedTree())))
                                         .isError(false)
@@ -106,10 +124,18 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = new File(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
                                 String pattern = (String) request.arguments().get("pattern");
-                                List<String> list = DECOMPILER.listArchiveClasses(new File(jarPath), pattern);
+                                List<String> list = DECOMPILER.listArchiveClasses(jar, pattern);
+                                String textResult = list.isEmpty()
+                                        ? (pattern != null && !pattern.isBlank() ? "// No classes found matching pattern '" + pattern + "' in archive: " + jarPath : "// No classes found in archive: " + jarPath)
+                                        : String.join("\n", list);
                                 return McpSchema.CallToolResult.builder()
-                                        .content(List.of(new McpSchema.TextContent(String.join("\n", list))))
+                                        .content(List.of(new McpSchema.TextContent(textResult)))
                                         .isError(false)
                                         .build();
                             } catch (Exception e) {
@@ -138,10 +164,15 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = new File(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
                                 String resourcePath = (String) request.arguments().get("resourcePath");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
-                                String content = DECOMPILER.readArchiveResource(new File(jarPath), resourcePath, lineOffset, lineLimit);
+                                String content = DECOMPILER.readArchiveResource(jar, resourcePath, lineOffset, lineLimit);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(content)))
                                         .isError(false)
@@ -304,9 +335,14 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = new File(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
                                 String outputDir = (String) request.arguments().get("outputDir");
                                 String pathFilter = (String) request.arguments().get("pathFilter");
-                                ExportResult result = DECOMPILER.exportArchive(new File(jarPath), new File(outputDir), pathFilter, DecompileOptions.defaults());
+                                ExportResult result = DECOMPILER.exportArchive(jar, new File(outputDir), pathFilter, DecompileOptions.defaults());
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result.toSummaryString())))
                                         .isError(false)
@@ -336,9 +372,14 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = new File(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
                                 String outputDir = (String) request.arguments().get("outputDir");
                                 String pathFilter = (String) request.arguments().get("pathFilter");
-                                int count = DECOMPILER.extractArchive(new File(jarPath), new File(outputDir), pathFilter);
+                                int count = DECOMPILER.extractArchive(jar, new File(outputDir), pathFilter);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent("Successfully extracted " + count + " file(s) to " + outputDir)))
                                         .isError(false)
@@ -352,6 +393,13 @@ public class JavadecMcpServer {
                         }
                 )
                 .build();
+
+        // Graceful shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                server.close();
+            } catch (Exception ignored) {}
+        }));
 
         try {
             Thread.currentThread().join();
