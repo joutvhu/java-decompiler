@@ -16,10 +16,6 @@
     <name>javadec-mcp</name>
     <description>Model Context Protocol (MCP) server for javadec to empower AI agents</description>
 
-    <properties>
-        <jackson.version>2.17.0</jackson.version>
-    </properties>
-
     <dependencies>
         <dependency>
             <groupId>com.github.joutvhu</groupId>
@@ -38,7 +34,6 @@
     </dependencies>
 
     <build>
-        <finalName>javadec-mcp</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -51,6 +46,16 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.joutvhu.javadec.mcp.JavadecMcpServer</mainClass>

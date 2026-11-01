@@ -252,7 +252,8 @@ public class JavaDecompiler {
      * Supports overloaded methods, constructors, interface/abstract methods, annotations, and CRLF line endings.
      */
     public String extractMethodFromSource(String fullSource, String methodName) {
-        String rawMethod = methodName.contains("(") ? methodName.substring(0, methodName.indexOf('(')).trim() : methodName.trim();
+        boolean hasParamHint = methodName.contains("(");
+        String rawMethod = hasParamHint ? methodName.substring(0, methodName.indexOf('(')).trim() : methodName.trim();
         String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
         Pattern pattern = Pattern.compile("(?m)^[ \\t]*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
         Matcher matcher = pattern.matcher(fullSource);
@@ -284,8 +285,9 @@ public class JavaDecompiler {
             startIdx = currentPos;
 
             String terminator = matcher.group(1);
+            String methodBlock;
             if (";".equals(terminator)) {
-                matchedMethods.add(fullSource.substring(startIdx, matcher.end()).trim());
+                methodBlock = fullSource.substring(startIdx, matcher.end()).trim();
             } else {
                 int openBraceIdx = matcher.end() - 1;
                 int depth = 0;
@@ -302,11 +304,22 @@ public class JavaDecompiler {
                     }
                 }
                 if (endIdx != -1) {
-                    matchedMethods.add(fullSource.substring(startIdx, endIdx).trim());
+                    methodBlock = fullSource.substring(startIdx, endIdx).trim();
                 } else {
-                    matchedMethods.add(fullSource.substring(startIdx).trim());
+                    methodBlock = fullSource.substring(startIdx).trim();
                 }
             }
+
+            // If a specific parameter signature was requested, check match
+            if (hasParamHint) {
+                String paramSignature = methodName.substring(methodName.indexOf('(')).replaceAll("\\s+", "");
+                String matchSignature = matcher.group().replaceAll("\\s+", "");
+                if (matchSignature.contains(paramSignature)) {
+                    return methodBlock;
+                }
+            }
+
+            matchedMethods.add(methodBlock);
         }
 
         if (matchedMethods.isEmpty()) {

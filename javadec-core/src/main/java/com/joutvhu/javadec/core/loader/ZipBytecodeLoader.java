@@ -19,6 +19,12 @@ public class ZipBytecodeLoader {
 
     private static final String[] ARCHIVE_CLASS_PREFIXES = {"", "BOOT-INF/classes/", "WEB-INF/classes/"};
 
+    private static final Set<String> BINARY_EXTENSIONS = Set.of(
+            ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svgz",
+            ".class", ".so", ".dll", ".dylib", ".exe", ".bin", ".dat",
+            ".zip", ".tar", ".gz", ".bz2", ".7z", ".pdf", ".ttf", ".woff", ".woff2"
+    );
+
     public static List<String> listClasses(File archiveFile, String filterPattern) throws IOException {
         List<String> classes = new ArrayList<>();
         String slashFilter = filterPattern != null ? filterPattern.trim().replace('\\', '/').replace('.', '/') : null;
@@ -192,9 +198,25 @@ public class ZipBytecodeLoader {
 
     /**
      * Reads text content of any non-class resource file from archive with optional line offset/limit.
+     * Safely guards against dumping unreadable binary assets (e.g. .png, .ico, .dll) into AI context.
      */
     public static String readResourceText(File archiveFile, String resourcePath, Integer lineOffset, Integer lineLimit) throws IOException {
         String normalized = resourcePath.replace('\\', '/').replaceAll("^/+", "");
+
+        // Binary extension check to protect AI context window
+        String lower = normalized.toLowerCase();
+        for (String ext : BINARY_EXTENSIONS) {
+            if (lower.endsWith(ext)) {
+                long size = -1;
+                try (ZipFile zipFile = new ZipFile(archiveFile)) {
+                    ZipEntry entry = zipFile.getEntry(normalized);
+                    if (entry != null) size = entry.getSize();
+                } catch (Exception ignored) {}
+                String sizeStr = size >= 0 ? " (" + size + " bytes)" : "";
+                return String.format("// [Binary asset: %s%s. Not a text resource. Use extract_archive to save to disk.]", normalized, sizeStr);
+            }
+        }
+
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             // 1. Direct and prefix lookups
             ZipEntry entry = null;
