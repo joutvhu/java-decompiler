@@ -1,0 +1,37 @@
+package com.joutvhu.javadec.engine.util;
+
+import com.joutvhu.javadec.engine.util.output.Dumper;
+
+import java.util.Collection;
+
+public class StringUtils {
+
+    public static boolean dot(boolean first, StringBuilder sb) {
+        if (!first) sb.append(".");
+        return false;
+    }
+
+    public static boolean comma(boolean first, StringBuilder sb) {
+        if (!first) sb.append(", ");
+        return false;
+    }
+
+    public static boolean comma(boolean first, Dumper d) {
+        if (!first) d.separator(", ");
+        return false;
+    }
+
+    public static String join(String[] in, String sep) {
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        for (String s : in) {
+            if (first) {
+                first = false;
+            } else {
+                sb.append(sep);
+            }
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "javadec",
+  "version": "1.0.0",
+  "description": "Universal & Token-Efficient Java Decompiler and MCP Server for AI & Developers",
+  "bin": {
+    "javadec": "bin/javadec.js"
+  },
+  "main": "bin/javadec.js",
+  "scripts": {
+    "start": "node bin/javadec.js",
+    "mcp": "node bin/javadec.js mcp",
+    "build": "node scripts/build.js",
+    "publish:local": "node scripts/publish-local.js",
+    "version": "node scripts/bump-version.js",
+    "bump": "node scripts/bump-version.js",
+    "prepack": "npm run build",
+    "test": "node bin/javadec.js --help"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joutvhu/java-decompiler.git"
+  },
+  "keywords": [
+    "java",
+    "decompiler",
+    "mcp",
+    "mcp-server",
+    "fernflower",
+    "cfr",
+    "bytecode",
+    "ai-agent",
+    "kiro",
+    "claude"
+  ],
+  "author": "Giao Ho <joutvhu@gmail.com>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/joutvhu/java-decompiler/issues"
+  },
+  "homepage": "https://github.com/joutvhu/java-decompiler#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "bin/",
+    "jars/",
+    "README.md",
+    "LICENSE"
+  ]
+}
