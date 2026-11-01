@@ -19,7 +19,8 @@ import java.util.List;
 /**
  * Ultra-fast class metadata and skeleton extractor using ASM without decompiling bytecode.
  * Extracts authentic method parameter names when available from debug symbols or -parameters flag,
- * accurately handling 2-slot types (long/double) in the local variable table.
+ * accurately handling 2-slot types (long/double) in the local variable table,
+ * and capturing both RUNTIME and CLASS retention annotations.
  */
 public class AsmClassOutlineExtractor {
 
@@ -56,7 +57,7 @@ public class AsmClassOutlineExtractor {
         }
 
         String accessModifiers = parseAccessModifiers(classNode.access);
-        List<String> annotations = extractAnnotations(classNode.visibleAnnotations);
+        List<String> annotations = extractAnnotations(classNode.visibleAnnotations, classNode.invisibleAnnotations);
 
         // Record components e.g. User(String name, int age)
         List<ClassOutline.RecordComponentOutline> recordComponents = new ArrayList<>();
@@ -84,7 +85,7 @@ public class AsmClassOutlineExtractor {
                             fn.name,
                             fieldType,
                             parseAccessModifiers(fn.access),
-                            extractAnnotations(fn.visibleAnnotations)
+                            extractAnnotations(fn.visibleAnnotations, fn.invisibleAnnotations)
                     ));
                 }
             }
@@ -146,7 +147,7 @@ public class AsmClassOutlineExtractor {
                         parameters,
                         exceptions,
                         parseAccessModifiers(mn.access),
-                        extractAnnotations(mn.visibleAnnotations)
+                        extractAnnotations(mn.visibleAnnotations, mn.invisibleAnnotations)
                 ));
             }
         }
@@ -181,11 +182,21 @@ public class AsmClassOutlineExtractor {
         return String.join(" ", mods);
     }
 
-    private static List<String> extractAnnotations(List<AnnotationNode> annotations) {
-        if (annotations == null) return Collections.emptyList();
+    private static List<String> extractAnnotations(List<AnnotationNode> visible, List<AnnotationNode> invisible) {
+        if (visible == null && invisible == null) return Collections.emptyList();
         List<String> list = new ArrayList<>();
-        for (AnnotationNode an : annotations) {
-            list.add(Type.getType(an.desc).getClassName());
+        if (visible != null) {
+            for (AnnotationNode an : visible) {
+                list.add(Type.getType(an.desc).getClassName());
+            }
+        }
+        if (invisible != null) {
+            for (AnnotationNode an : invisible) {
+                String name = Type.getType(an.desc).getClassName();
+                if (!list.contains(name)) {
+                    list.add(name);
+                }
+            }
         }
         return list;
     }

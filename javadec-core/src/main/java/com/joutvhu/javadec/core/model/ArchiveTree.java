@@ -110,6 +110,21 @@ public record ArchiveTree(
         sb.append(", ")
                 .append(classCount).append(" classes, ")
                 .append(resourceCount).append(" resources, depth=").append(depthLimit).append(")\n");
+
+        if (normalizedSubPath.isEmpty()) {
+            if (!packages.isEmpty()) {
+                sb.append("Packages: ").append(String.join(", ", packages)).append("\n");
+            }
+            if (!resources.isEmpty()) {
+                List<String> displayConfigs = resources.size() > 5 ? resources.subList(0, 5) : resources;
+                sb.append("Key resources: ").append(String.join(", ", displayConfigs));
+                if (resources.size() > 5) {
+                    sb.append(" (+").append(resources.size() - 5).append(" more)");
+                }
+                sb.append("\n");
+            }
+        }
+
         renderTree(root, "", sb, 0, depthLimit);
 
         return new ArchiveTree(
