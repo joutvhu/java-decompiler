@@ -62,11 +62,25 @@ public class JavaDecompilerTest {
 
         // 7. Test extractArchive (raw extraction)
         File rawExtractDir = tempDir.resolve("raw").toFile();
-        int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "META-INF/plugin.xml");
-        assertTrue(extracted > 0, "Must extract plugin.xml");
-        assertTrue(new File(rawExtractDir, "META-INF/plugin.xml").exists(), "Extracted file must exist on disk");
+        int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "ConsoleDecompiler");
+        assertTrue(extracted > 0, "Must extract ConsoleDecompiler");
+        File extractedClassFile = new File(rawExtractDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
+        assertTrue(extractedClassFile.exists(), "Extracted .class file must exist on disk");
 
-        // 8. Test exportArchive (full decompilation to .java files)
+        // 8. Test standalone file methods (getClassOutline, decompileFile, decompileFileMethod)
+        ClassOutline standaloneOutline = decompiler.getClassOutline(extractedClassFile);
+        assertNotNull(standaloneOutline);
+        assertEquals("ConsoleDecompiler", standaloneOutline.className().substring(standaloneOutline.className().lastIndexOf('/') + 1));
+
+        String standaloneSource = decompiler.decompileFile(extractedClassFile, DecompileOptions.defaults());
+        assertNotNull(standaloneSource);
+        assertTrue(standaloneSource.contains("ConsoleDecompiler"));
+
+        String standaloneMethod = decompiler.decompileFileMethod(extractedClassFile, "main", DecompileOptions.defaults());
+        assertNotNull(standaloneMethod);
+        assertTrue(standaloneMethod.contains("main"));
+
+        // 9. Test exportArchive (full decompilation to .java files)
         File decompiledDir = tempDir.resolve("decompiled").toFile();
         ExportResult exportResult = decompiler.exportArchive(jarFile, decompiledDir, "ConsoleDecompiler", DecompileOptions.defaults());
         assertNotNull(exportResult);
@@ -74,11 +88,10 @@ public class JavaDecompilerTest {
         File expectedJavaFile = new File(decompiledDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.java");
         assertTrue(expectedJavaFile.exists(), "Decompiled .java file must exist on disk at " + expectedJavaFile.getAbsolutePath());
 
-        // 9. Test Companion Sources JAR resolution (preserves Javadoc and comments)
+        // 10. Test Companion Sources JAR resolution (preserves Javadoc and comments)
         File mockBinJar = tempDir.resolve("demo-lib-1.0.jar").toFile();
         File mockSrcJar = tempDir.resolve("demo-lib-1.0-sources.jar").toFile();
 
-        // Create mock binary jar
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(mockBinJar))) {
             zos.putNextEntry(new ZipEntry("com/example/Demo.class"));
             byte[] dummyBytes = ZipBytecodeLoader.loadClassBytes(jarFile, targetClass);
@@ -86,7 +99,6 @@ public class JavaDecompilerTest {
             zos.closeEntry();
         }
 
-        // Create mock sources jar with rich Javadoc comments
         String sampleSourceWithJavadoc = """
                 package com.example;
                 
@@ -115,7 +127,6 @@ public class JavaDecompilerTest {
             zos.closeEntry();
         }
 
-        // Verify that decompiler prioritizes the companion sources jar and returns full Javadoc
         String resolvedSource = decompiler.decompileArchiveClass(mockBinJar, "com/example/Demo.class", DecompileOptions.defaults());
         assertNotNull(resolvedSource);
         assertTrue(resolvedSource.contains("Service handling core order management operations"), "Must contain class Javadoc");

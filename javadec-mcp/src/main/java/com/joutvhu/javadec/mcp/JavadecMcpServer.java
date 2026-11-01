@@ -31,12 +31,21 @@ public class JavadecMcpServer {
         return lower.endsWith(".jar") || lower.endsWith(".zip") || lower.endsWith(".war") || lower.endsWith(".ear");
     }
 
+    private static String cleanPathString(String p) {
+        if (p == null) return null;
+        String s = p.trim();
+        if ((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'"))) {
+            s = s.substring(1, s.length() - 1).trim();
+        }
+        return s;
+    }
+
     private static String resolveTarget(Map<String, Object> arguments) {
         if (arguments.get("target") instanceof String t && !t.isBlank()) {
-            return t;
+            return cleanPathString(t);
         }
         if (arguments.get("jarPath") instanceof String jar && arguments.get("classPath") instanceof String cls) {
-            return jar + "!" + cls;
+            return cleanPathString(jar) + "!" + cleanPathString(cls);
         }
         return null;
     }
@@ -87,13 +96,13 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String jarPath = (String) request.arguments().get("jarPath");
+                                String jarPath = cleanPathString((String) request.arguments().get("jarPath"));
                                 File jar = new File(jarPath);
                                 if (!jar.exists()) {
                                     throw new FileNotFoundException("Archive file not found: " + jarPath);
                                 }
 
-                                String path = (String) request.arguments().get("path");
+                                String path = cleanPathString((String) request.arguments().get("path"));
                                 Integer depth = request.arguments().get("depth") instanceof Number n ? n.intValue() : null;
                                 ArchiveTree tree = DECOMPILER.inspectArchiveTree(jar, path, depth);
                                 return McpSchema.CallToolResult.builder()
@@ -123,13 +132,13 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String jarPath = (String) request.arguments().get("jarPath");
+                                String jarPath = cleanPathString((String) request.arguments().get("jarPath"));
                                 File jar = new File(jarPath);
                                 if (!jar.exists()) {
                                     throw new FileNotFoundException("Archive file not found: " + jarPath);
                                 }
 
-                                String pattern = (String) request.arguments().get("pattern");
+                                String pattern = cleanPathString((String) request.arguments().get("pattern"));
                                 List<String> list = DECOMPILER.listArchiveClasses(jar, pattern);
                                 String textResult = list.isEmpty()
                                         ? (pattern != null && !pattern.isBlank() ? "// No classes found matching pattern '" + pattern + "' in archive: " + jarPath : "// No classes found in archive: " + jarPath)
@@ -163,13 +172,13 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String jarPath = (String) request.arguments().get("jarPath");
+                                String jarPath = cleanPathString((String) request.arguments().get("jarPath"));
                                 File jar = new File(jarPath);
                                 if (!jar.exists()) {
                                     throw new FileNotFoundException("Archive file not found: " + jarPath);
                                 }
 
-                                String resourcePath = (String) request.arguments().get("resourcePath");
+                                String resourcePath = cleanPathString((String) request.arguments().get("resourcePath"));
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 String content = DECOMPILER.readArchiveResource(jar, resourcePath, lineOffset, lineLimit);
@@ -195,6 +204,10 @@ public class JavadecMcpServer {
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
                                                 "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
                                         )
                                 ))
                                 .build(),
@@ -234,6 +247,10 @@ public class JavadecMcpServer {
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
                                         )
                                 ))
                                 .build(),
@@ -282,7 +299,11 @@ public class JavadecMcpServer {
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
-                                        "required", List.of("methodName")
+                                        "required", List.of("methodName"),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
                                 ))
                                 .build(),
                         (exchange, request) -> {
@@ -290,7 +311,7 @@ public class JavadecMcpServer {
                                 String target = resolveTarget(request.arguments());
                                 validateTarget(target);
 
-                                String methodName = (String) request.arguments().get("methodName");
+                                String methodName = cleanPathString((String) request.arguments().get("methodName"));
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 DecompileOptions options = DecompileOptions.builder()
@@ -334,14 +355,14 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String jarPath = (String) request.arguments().get("jarPath");
+                                String jarPath = cleanPathString((String) request.arguments().get("jarPath"));
                                 File jar = new File(jarPath);
                                 if (!jar.exists()) {
                                     throw new FileNotFoundException("Archive file not found: " + jarPath);
                                 }
 
-                                String outputDir = (String) request.arguments().get("outputDir");
-                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                String outputDir = cleanPathString((String) request.arguments().get("outputDir"));
+                                String pathFilter = cleanPathString((String) request.arguments().get("pathFilter"));
                                 ExportResult result = DECOMPILER.exportArchive(jar, new File(outputDir), pathFilter, DecompileOptions.defaults());
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result.toSummaryString())))
@@ -371,14 +392,14 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String jarPath = (String) request.arguments().get("jarPath");
+                                String jarPath = cleanPathString((String) request.arguments().get("jarPath"));
                                 File jar = new File(jarPath);
                                 if (!jar.exists()) {
                                     throw new FileNotFoundException("Archive file not found: " + jarPath);
                                 }
 
-                                String outputDir = (String) request.arguments().get("outputDir");
-                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                String outputDir = cleanPathString((String) request.arguments().get("outputDir"));
+                                String pathFilter = cleanPathString((String) request.arguments().get("pathFilter"));
                                 int count = DECOMPILER.extractArchive(jar, new File(outputDir), pathFilter);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent("Successfully extracted " + count + " file(s) to " + outputDir)))
