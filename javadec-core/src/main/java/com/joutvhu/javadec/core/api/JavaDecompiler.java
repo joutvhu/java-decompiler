@@ -4,19 +4,24 @@ import com.joutvhu.javadec.core.engine.CfrDecompilerEngine;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
+import com.joutvhu.javadec.core.model.ExportResult;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 /**
  * Main JavaDecompiler entry point providing outline, selective decompilation,
- * resource inspection, pagination, and archive extraction capabilities.
+ * resource inspection, pagination, archive extraction, and full source export capabilities.
  */
 public class JavaDecompiler {
 
@@ -60,10 +65,96 @@ public class JavaDecompiler {
     }
 
     /**
-     * Extracts files from an archive to a destination directory on disk.
+     * Extracts raw files from an archive to a destination directory on disk.
      */
     public int extractArchive(File archiveFile, File targetDir, String pathFilter) throws IOException {
         return ZipBytecodeLoader.extractArchive(archiveFile, targetDir, pathFilter);
+    }
+
+    /**
+     * Decompiles all (or filtered) classes in an archive into .java files on disk,
+     * maintaining package folder structures and copying non-class resources.
+     *
+     * @param archiveFile the JAR/ZIP file to decompile
+     * @param outputDir   target directory to write decompiled source files
+     * @param pathFilter  optional package or path filter (e.g. com/example/service)
+     * @param options     decompilation options (e.g. line numbers, engine)
+     * @return summary of exported classes and resources
+     */
+    public ExportResult exportArchive(File archiveFile, File outputDir, String pathFilter, DecompileOptions options) throws IOException {
+        if (!outputDir.exists()) {
+            outputDir.mkdirs();
+        }
+
+        DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        String slashFilter = pathFilter != null ? pathFilter.trim().replace('\\', '/').replaceAll("^/+", "").replace('.', '/') : null;
+
+        int decompiledCount = 0;
+        int resourceCount = 0;
+        int failCount = 0;
+
+        try (ZipFile zipFile = new ZipFile(archiveFile)) {
+            Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                if (entry.isDirectory()) continue;
+
+                // Strip Spring Boot / WAR prefixes if present
+                String cleanName = name;
+                if (cleanName.startsWith("BOOT-INF/classes/")) {
+                    cleanName = cleanName.substring("BOOT-INF/classes/".length());
+                } else if (cleanName.startsWith("WEB-INF/classes/")) {
+                    cleanName = cleanName.substring("WEB-INF/classes/".length());
+                }
+
+                if (slashFilter != null && !cleanName.startsWith(slashFilter) && !cleanName.contains(slashFilter)) {
+                    continue;
+                }
+
+                if (cleanName.endsWith(".class")) {
+                    // Skip anonymous or inner classes during top-level loop; CFR will inline them into outer class
+                    int dollarIdx = cleanName.lastIndexOf('$');
+                    if (dollarIdx > 0 && dollarIdx > cleanName.lastIndexOf('/')) {
+                        continue;
+                    }
+
+                    try {
+                        String source = decompileArchiveClass(archiveFile, cleanName, opts);
+                        String javaFileName = cleanName.substring(0, cleanName.length() - 6) + ".java";
+                        File destJavaFile = new File(outputDir, javaFileName);
+
+                        // Validate against Zip Slip
+                        Path destPath = destJavaFile.toPath().normalize();
+                        if (!destPath.startsWith(outputDir.toPath().normalize())) {
+                            throw new IOException("Bad zip entry path: " + name);
+                        }
+
+                        destJavaFile.getParentFile().mkdirs();
+                        Files.writeString(destPath, source, StandardCharsets.UTF_8);
+                        decompiledCount++;
+                    } catch (Exception e) {
+                        failCount++;
+                    }
+                } else {
+                    // Copy resource file to output directory
+                    File destResourceFile = new File(outputDir, cleanName);
+                    Path destPath = destResourceFile.toPath().normalize();
+                    if (!destPath.startsWith(outputDir.toPath().normalize())) {
+                        throw new IOException("Bad zip entry path: " + name);
+                    }
+
+                    destResourceFile.getParentFile().mkdirs();
+                    try (InputStream is = zipFile.getInputStream(entry);
+                         OutputStream os = Files.newOutputStream(destPath)) {
+                        is.transferTo(os);
+                    }
+                    resourceCount++;
+                }
+            }
+        }
+
+        return new ExportResult(decompiledCount, resourceCount, failCount, outputDir.getAbsolutePath());
     }
 
     /**

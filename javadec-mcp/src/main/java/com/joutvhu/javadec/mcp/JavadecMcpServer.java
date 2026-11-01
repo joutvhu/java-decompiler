@@ -4,6 +4,7 @@ import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
+import com.joutvhu.javadec.core.model.ExportResult;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -254,8 +255,40 @@ public class JavadecMcpServer {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("export_archive")
+                                .description("Decompile all (or filtered) classes in an archive into .java files on disk, copying resources and maintaining package structure")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive"),
+                                                "outputDir", Map.of("type", "string", "description", "Directory path on disk to output decompiled .java source files"),
+                                                "pathFilter", Map.of("type", "string", "description", "Optional package or path filter (e.g. com/example/service)")
+                                        ),
+                                        "required", List.of("jarPath", "outputDir")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                String outputDir = (String) request.arguments().get("outputDir");
+                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                ExportResult result = DECOMPILER.exportArchive(new File(jarPath), new File(outputDir), pathFilter, DecompileOptions.defaults());
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.toSummaryString())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("extract_archive")
-                                .description("Extract all or matching files from an archive to a destination directory on disk")
+                                .description("Extract raw files (bytecode and resources) from an archive to a destination directory on disk")
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(

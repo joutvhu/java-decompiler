@@ -4,6 +4,7 @@ import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
+import com.joutvhu.javadec.core.model.ExportResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -25,15 +26,11 @@ public class JavaDecompilerTest {
         ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, "META-INF", 2);
         assertNotNull(tree);
         assertTrue(tree.formattedTree().contains("plugin.xml"), "Tree filtered to META-INF should contain plugin.xml");
-        System.out.println("=== ARCHIVE TREE (META-INF, depth 2) ===");
-        System.out.println(tree.formattedTree());
 
         // 2. Test readArchiveResource with pagination (lines 1 to 5)
         String pluginXml = decompiler.readArchiveResource(jarFile, "META-INF/plugin.xml", 1, 5);
         assertNotNull(pluginXml);
         assertEquals(5, pluginXml.split("\r?\n").length, "Should read exactly 5 lines");
-        System.out.println("=== RESOURCE PAGINATED (5 lines) ===");
-        System.out.println(pluginXml);
 
         // 3. Test listArchiveClasses
         List<String> classes = decompiler.listArchiveClasses(jarFile, "ConsoleDecompiler");
@@ -45,8 +42,6 @@ public class JavaDecompilerTest {
         assertNotNull(outline);
         assertEquals("ConsoleDecompiler", outline.className().substring(outline.className().lastIndexOf('/') + 1));
         String skeleton = outline.toSkeletonSource();
-        System.out.println("=== SKELETON SOURCE ===");
-        System.out.println(skeleton);
         assertTrue(skeleton.contains("ConsoleDecompiler"));
 
         // 5. Test decompileArchiveClass with line pagination (lines 10 to 15)
@@ -58,14 +53,22 @@ public class JavaDecompilerTest {
         // 6. Test decompileArchiveMethod
         String methodSource = decompiler.decompileArchiveMethod(jarFile, targetClass, "main", DecompileOptions.defaults());
         assertNotNull(methodSource);
-        System.out.println("=== METHOD SOURCE ===");
-        System.out.println(methodSource);
         assertTrue(methodSource.contains("main"));
 
-        // 7. Test extractArchive
-        File outputDir = tempDir.resolve("extracted").toFile();
-        int extracted = decompiler.extractArchive(jarFile, outputDir, "META-INF/plugin.xml");
+        // 7. Test extractArchive (raw extraction)
+        File rawExtractDir = tempDir.resolve("raw").toFile();
+        int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "META-INF/plugin.xml");
         assertTrue(extracted > 0, "Must extract plugin.xml");
-        assertTrue(new File(outputDir, "META-INF/plugin.xml").exists(), "Extracted file must exist on disk");
+        assertTrue(new File(rawExtractDir, "META-INF/plugin.xml").exists(), "Extracted file must exist on disk");
+
+        // 8. Test exportArchive (full decompilation to .java files)
+        File decompiledDir = tempDir.resolve("decompiled").toFile();
+        ExportResult exportResult = decompiler.exportArchive(jarFile, decompiledDir, "ConsoleDecompiler", DecompileOptions.defaults());
+        assertNotNull(exportResult);
+        assertTrue(exportResult.decompiledClasses() > 0, "Must decompile at least 1 class");
+        File expectedJavaFile = new File(decompiledDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.java");
+        assertTrue(expectedJavaFile.exists(), "Decompiled .java file must exist on disk at " + expectedJavaFile.getAbsolutePath());
+        System.out.println("=== EXPORT RESULT ===");
+        System.out.println(exportResult.toSummaryString());
     }
 }

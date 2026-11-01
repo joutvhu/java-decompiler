@@ -1,11 +1,11 @@
 ---
 name: "javadec"
-description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, or decompiling Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar."
+description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar, dump jar, export jar."
 ---
 
 # Javadec - Java Bytecode & Archive Inspector for AI Agents
 
-`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It avoids dumping huge source files by offering compact tree views with customizable root path/depth, zero-extraction resource reading with line pagination, class outlines (skeletons), and selective method-level decompilation.
+`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It avoids dumping huge source files by offering compact tree views with customizable root path/depth, zero-extraction resource reading with line pagination, class outlines (skeletons), selective method-level decompilation, and full archive decompilation/export to `.java` files on disk.
 
 ---
 
@@ -28,8 +28,11 @@ Never decompile an entire JAR or huge class file without inspecting outlines or 
        ├──► 4. Method View: decompile_method / javadec view -m <method> [--offset <o>] [--limit <l>]
        │       Decompile only the implementation logic of the target method
        │
-       └──► 5. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
-               Fallback only when cross-method flow or complete class structure is required
+       ├──► 5. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
+       │       Fallback only when cross-method flow or complete class structure is required
+       │
+       └──► 6. Export to Disk: export_archive / javadec dump -o <outputDir> [-p <filter>]
+               Export all decompiled .java source files and resources into a directory on disk
 ```
 
 ---
@@ -46,7 +49,8 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `get_class_outline(target)` — lightweight skeleton/signatures (~90% token savings)
 - `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads
 - `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination
-- `extract_archive(jarPath, outputDir, pathFilter?)` — extract archive files to disk
+- `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
+- `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
 ### Mode B: Shell CLI (Fallback)
 If MCP tools are not registered, execute CLI commands in the terminal using `javadec` (or `npx -y javadec`):
@@ -56,6 +60,7 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec outline <target>`
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>]`
 - `javadec view <target> [--offset <n>] [--limit <n>]`
+- `javadec dump <jarPath> -o <outputDir> [-p <filter>]` (alias: `export`)
 - `javadec extract <jarPath> -o <outputDir> [-p <filter>]`
 
 *Note on Java Runtime: If the system default Java is older than Java 21, set `JAVADEC_JAVA_PATH` or `JAVADEC_JAVA_HOME` pointing to a JDK 21+ installation when executing CLI commands.*
@@ -112,8 +117,15 @@ When addressing a class, use the standard target URI syntax:
 
 ---
 
-### Workflow C: Extract Targeted Resources or Code
-When files need to be unpacked to disk for building, referencing, or analyzing:
+### Workflow C: Decompile & Export Entire Archive to Source Code (.java)
+When the user requests to decompile an entire library or package into readable `.java` files for offline browsing or migration:
+- MCP: `export_archive({ "jarPath": "lib.jar", "outputDir": "./src/decompiled", "pathFilter": "com/example/service" })`
+- CLI: `javadec dump lib.jar -o ./src/decompiled -p com/example/service`
+
+---
+
+### Workflow D: Extract Raw Archive Resources or Bytecode
+When files need to be unpacked to disk as-is:
 - MCP: `extract_archive({ "jarPath": "lib.jar", "outputDir": "./extracted", "pathFilter": "META-INF/" })`
 - CLI: `javadec extract lib.jar -o ./extracted -p META-INF/`
 

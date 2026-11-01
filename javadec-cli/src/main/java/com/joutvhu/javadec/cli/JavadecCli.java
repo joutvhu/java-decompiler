@@ -4,6 +4,7 @@ import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
+import com.joutvhu.javadec.core.model.ExportResult;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -24,6 +25,7 @@ import java.util.concurrent.Callable;
                 JavadecCli.OutlineCommand.class,
                 JavadecCli.ViewCommand.class,
                 JavadecCli.ResourceCommand.class,
+                JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
 )
@@ -177,7 +179,31 @@ public class JavadecCli implements Callable<Integer> {
         }
     }
 
-    @Command(name = "extract", description = "Extract archive entries to a directory on disk")
+    @Command(name = "dump", aliases = {"export"}, description = "Decompile entire archive or filtered packages into .java files on disk")
+    static class DumpCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar or .zip archive")
+        private File jarFile;
+
+        @Option(names = {"-o", "--output"}, required = true, description = "Output directory for decompiled .java source files")
+        private File outputDir;
+
+        @Option(names = {"-p", "--path"}, description = "Optional package or path filter (e.g. com/example/service)")
+        private String pathFilter;
+
+        @Option(names = {"-l", "--lines"}, description = "Include bytecode line number comments in output")
+        private boolean showLines;
+
+        @Override
+        public Integer call() throws Exception {
+            JavaDecompiler decompiler = new JavaDecompiler();
+            DecompileOptions options = DecompileOptions.builder().showLineNumbers(showLines).build();
+            ExportResult result = decompiler.exportArchive(jarFile, outputDir, pathFilter, options);
+            System.out.println(result.toSummaryString());
+            return 0;
+        }
+    }
+
+    @Command(name = "extract", description = "Extract raw archive entries to a directory on disk")
     static class ExtractCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .jar or .zip archive")
         private File jarFile;
