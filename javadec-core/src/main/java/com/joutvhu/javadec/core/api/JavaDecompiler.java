@@ -244,9 +244,15 @@ public class JavaDecompiler {
      * Decompiles and extracts only the specified method body to minimize token usage.
      */
     public String decompileMethod(String className, byte[] bytecode, String methodName, DecompileOptions options) {
-        String fullSource = defaultEngine.decompile(className, bytecode, options);
-        String extracted = extractMethodFromSource(fullSource, methodName);
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        DecompileOptions unpagedOpts = DecompileOptions.builder()
+                .showLineNumbers(opts.showLineNumbers())
+                .includeSyntheticMembers(opts.includeSyntheticMembers())
+                .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .preferredEngine(opts.preferredEngine())
+                .build();
+        String fullSource = defaultEngine.decompile(className, bytecode, unpagedOpts);
+        String extracted = extractMethodFromSource(fullSource, methodName);
         return ZipBytecodeLoader.paginateLines(extracted, opts.lineOffset(), opts.lineLimit());
     }
 
@@ -255,9 +261,15 @@ public class JavaDecompiler {
      * maintaining local folder context for inner class resolution.
      */
     public String decompileFileMethod(File classFile, String methodName, DecompileOptions options) throws IOException {
-        String fullSource = decompileFile(classFile, options);
-        String extracted = extractMethodFromSource(fullSource, methodName);
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        DecompileOptions unpagedOpts = DecompileOptions.builder()
+                .showLineNumbers(opts.showLineNumbers())
+                .includeSyntheticMembers(opts.includeSyntheticMembers())
+                .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .preferredEngine(opts.preferredEngine())
+                .build();
+        String fullSource = decompileFile(classFile, unpagedOpts);
+        String extracted = extractMethodFromSource(fullSource, methodName);
         return ZipBytecodeLoader.paginateLines(extracted, opts.lineOffset(), opts.lineLimit());
     }
 
@@ -266,15 +278,32 @@ public class JavaDecompiler {
      * preserving original Javadoc and comments if a companion `-sources.jar` is present.
      */
     public String decompileArchiveMethod(File archiveFile, String classPath, String methodName, DecompileOptions options) throws IOException {
-        String fullSource = decompileArchiveClass(archiveFile, classPath, options);
-        String extracted = extractMethodFromSource(fullSource, methodName);
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        DecompileOptions unpagedOpts = DecompileOptions.builder()
+                .showLineNumbers(opts.showLineNumbers())
+                .includeSyntheticMembers(opts.includeSyntheticMembers())
+                .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .preferredEngine(opts.preferredEngine())
+                .build();
+        String fullSource = decompileArchiveClass(archiveFile, classPath, unpagedOpts);
+        String extracted = extractMethodFromSource(fullSource, methodName);
         return ZipBytecodeLoader.paginateLines(extracted, opts.lineOffset(), opts.lineLimit());
     }
 
     /**
+     * Returns true if the character at position pos is escaped by an odd number of preceding backslashes.
+     */
+    private static boolean isEscaped(String s, int pos) {
+        int backslashCount = 0;
+        for (int j = pos - 1; j >= 0 && s.charAt(j) == '\\'; j--) {
+            backslashCount++;
+        }
+        return (backslashCount % 2) != 0;
+    }
+
+    /**
      * Extracts method declaration(s), preceding annotations, and bodies from decompiled Java source text.
-     * Supports overloaded methods, constructors, interface/abstract methods, static initializers, same-line annotations, and CRLF line endings.
+     * Accurately parses nested braces while ignoring braces inside string literals, characters, and comments.
      */
     public String extractMethodFromSource(String fullSource, String methodName) {
         String rawMethod = methodName.trim();
@@ -328,8 +357,40 @@ public class JavaDecompiler {
                 int openBraceIdx = matcher.end() - 1;
                 int depth = 0;
                 int endIdx = -1;
+
+                boolean inString = false;
+                boolean inChar = false;
+                boolean inLineComment = false;
+                boolean inBlockComment = false;
+
                 for (int i = openBraceIdx; i < fullSource.length(); i++) {
                     char c = fullSource.charAt(i);
+
+                    if (inLineComment) {
+                        if (c == '\n') inLineComment = false;
+                        continue;
+                    }
+                    if (inBlockComment) {
+                        if (c == '/' && i > openBraceIdx && fullSource.charAt(i - 1) == '*') inBlockComment = false;
+                        continue;
+                    }
+                    if (inString) {
+                        if (c == '"' && !isEscaped(fullSource, i)) inString = false;
+                        continue;
+                    }
+                    if (inChar) {
+                        if (c == '\'' && !isEscaped(fullSource, i)) inChar = false;
+                        continue;
+                    }
+
+                    if (c == '/' && i + 1 < fullSource.length()) {
+                        char next = fullSource.charAt(i + 1);
+                        if (next == '/') { inLineComment = true; i++; continue; }
+                        if (next == '*') { inBlockComment = true; i++; continue; }
+                    }
+                    if (c == '"') { inString = true; continue; }
+                    if (c == '\'') { inChar = true; continue; }
+
                     if (c == '{') depth++;
                     else if (c == '}') {
                         depth--;
@@ -339,6 +400,7 @@ public class JavaDecompiler {
                         }
                     }
                 }
+
                 if (endIdx != -1) {
                     methodBlock = fullSource.substring(startIdx, endIdx).trim();
                 } else {
