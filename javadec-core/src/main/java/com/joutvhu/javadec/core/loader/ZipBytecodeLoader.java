@@ -14,7 +14,8 @@ import java.util.zip.ZipFile;
  * High-performance reader and extractor for JAR/ZIP archives and in-memory bytecode/resources.
  * Natively supports standard JARs, Spring Boot executable fat JARs (BOOT-INF/classes), WARs (WEB-INF/classes),
  * and Companion Sources JARs (-sources.jar) for reading original Javadoc and comments.
- * Automatically resolves inner classes written with dot notation (e.g. Outer.Inner -> Outer$Inner).
+ * Automatically resolves inner classes written with dot notation (e.g. Outer.Inner -> Outer$Inner),
+ * and supports case-insensitive search patterns.
  */
 public class ZipBytecodeLoader {
 
@@ -32,6 +33,9 @@ public class ZipBytecodeLoader {
         String cleanFilter = filterPattern != null ? filterPattern.trim().replaceAll("^\\*+", "").replaceAll("\\*+$", "") : null;
         String slashFilter = cleanFilter != null ? cleanFilter.replace('\\', '/').replace('.', '/') : null;
         String dotFilter = cleanFilter != null ? cleanFilter.replace('\\', '.').replace('/', '.') : null;
+
+        String lowerSlashFilter = slashFilter != null ? slashFilter.toLowerCase() : null;
+        String lowerDotFilter = dotFilter != null ? dotFilter.toLowerCase() : null;
 
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -52,7 +56,11 @@ public class ZipBytecodeLoader {
                         classes.add(className);
                     } else {
                         String dottedName = className.replace('/', '.');
-                        if (className.contains(slashFilter) || dottedName.contains(dotFilter) || name.contains(slashFilter)) {
+                        String lowerClass = className.toLowerCase();
+                        String lowerDotted = dottedName.toLowerCase();
+                        String lowerRaw = name.toLowerCase();
+
+                        if (lowerClass.contains(lowerSlashFilter) || lowerDotted.contains(lowerDotFilter) || lowerRaw.contains(lowerSlashFilter)) {
                             classes.add(className);
                         }
                     }

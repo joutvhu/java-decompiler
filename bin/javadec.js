@@ -184,3 +184,16 @@ child.on('error', (err) => {
 child.on('close', (code) => {
     process.exit(code || 0);
 });
+
+// Forward termination signals gracefully to child JVM
+process.on('SIGINT', () => {
+    if (child && !child.killed) {
+        try { child.kill('SIGINT'); } catch (ignored) {}
+    }
+});
+
+process.on('SIGTERM', () => {
+    if (child && !child.killed) {
+        try { child.kill('SIGTERM'); } catch (ignored) {}
+    }
+});
