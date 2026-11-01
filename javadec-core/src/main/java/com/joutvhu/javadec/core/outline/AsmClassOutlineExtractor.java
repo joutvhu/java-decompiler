@@ -10,15 +10,16 @@ import org.objectweb.asm.tree.FieldNode;
 import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.ParameterNode;
+import org.objectweb.asm.tree.RecordComponentNode;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /**
  * Ultra-fast class metadata and skeleton extractor using ASM without decompiling bytecode.
- * Extracts authentic method parameter names when available from debug symbols or -parameters flag.
+ * Extracts authentic method parameter names when available from debug symbols or -parameters flag,
+ * accurately handling 2-slot types (long/double) in the local variable table.
  */
 public class AsmClassOutlineExtractor {
 
@@ -57,33 +58,59 @@ public class AsmClassOutlineExtractor {
         String accessModifiers = parseAccessModifiers(classNode.access);
         List<String> annotations = extractAnnotations(classNode.visibleAnnotations);
 
+        // Record components e.g. User(String name, int age)
+        List<ClassOutline.RecordComponentOutline> recordComponents = new ArrayList<>();
+        if (classNode.recordComponents != null) {
+            for (RecordComponentNode rcn : classNode.recordComponents) {
+                String compType = Type.getType(rcn.descriptor).getClassName();
+                recordComponents.add(new ClassOutline.RecordComponentOutline(compType, rcn.name));
+            }
+        }
+
+        // Enum constants and regular fields
+        List<String> enumConstants = new ArrayList<>();
         List<ClassOutline.FieldOutline> fields = new ArrayList<>();
         if (classNode.fields != null) {
             for (FieldNode fn : classNode.fields) {
-                String fieldType = Type.getType(fn.desc).getClassName();
-                fields.add(new ClassOutline.FieldOutline(
-                        fn.name,
-                        fieldType,
-                        parseAccessModifiers(fn.access),
-                        extractAnnotations(fn.visibleAnnotations)
-                ));
+                if ((fn.access & Opcodes.ACC_SYNTHETIC) != 0) {
+                    continue; // Skip synthetic fields e.g. $VALUES
+                }
+
+                if ((fn.access & Opcodes.ACC_ENUM) != 0) {
+                    enumConstants.add(fn.name);
+                } else {
+                    String fieldType = Type.getType(fn.desc).getClassName();
+                    fields.add(new ClassOutline.FieldOutline(
+                            fn.name,
+                            fieldType,
+                            parseAccessModifiers(fn.access),
+                            extractAnnotations(fn.visibleAnnotations)
+                    ));
+                }
             }
         }
 
         List<ClassOutline.MethodOutline> methods = new ArrayList<>();
         if (classNode.methods != null) {
             for (MethodNode mn : classNode.methods) {
+                if ((mn.access & Opcodes.ACC_SYNTHETIC) != 0) {
+                    continue; // Skip compiler synthetic bridge methods
+                }
+
                 Type methodType = Type.getMethodType(mn.desc);
                 String returnType = methodType.getReturnType().getClassName();
                 Type[] argTypes = methodType.getArgumentTypes();
 
                 List<ClassOutline.ParameterOutline> parameters = new ArrayList<>();
                 boolean isStatic = (mn.access & Opcodes.ACC_STATIC) != 0;
-                int varOffset = isStatic ? 0 : 1;
+                int currentSlot = isStatic ? 0 : 1;
 
                 for (int i = 0; i < argTypes.length; i++) {
-                    String typeName = argTypes[i].getClassName();
+                    Type argType = argTypes[i];
+                    String typeName = argType.getClassName();
                     String paramName = null;
+                    int targetSlot = currentSlot;
+                    currentSlot += argType.getSize(); // 2 slots for long and double, 1 slot for others
 
                     // 1. Check -parameters flag info
                     if (mn.parameters != null && i < mn.parameters.size()) {
@@ -93,10 +120,10 @@ public class AsmClassOutlineExtractor {
                         }
                     }
 
-                    // 2. Fall back to local variable table
+                    // 2. Fall back to local variable table matching targetSlot
                     if (paramName == null && mn.localVariables != null) {
                         for (LocalVariableNode lvn : mn.localVariables) {
-                            if (lvn.index == (varOffset + i) && lvn.name != null && !lvn.name.equals("this")) {
+                            if (lvn.index == targetSlot && lvn.name != null && !lvn.name.equals("this")) {
                                 paramName = lvn.name;
                                 break;
                             }
@@ -134,6 +161,8 @@ public class AsmClassOutlineExtractor {
                 classNode.superName,
                 interfaces,
                 annotations,
+                recordComponents,
+                enumConstants,
                 fields,
                 methods,
                 classNode.version & 0xFFFF

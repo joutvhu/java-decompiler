@@ -1,10 +1,12 @@
 package com.joutvhu.javadec.core.model;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Represents the outline (skeleton/signature) of a Java class/interface/record/enum.
  * Extremely token-efficient, allowing AI agents to understand API structures without full method bodies.
+ * Natively renders clean Java syntax for records, enums, annotations, and methods.
  */
 public record ClassOutline(
         String className,
@@ -14,10 +16,17 @@ public record ClassOutline(
         String superClassName,
         List<String> interfaces,
         List<String> annotations,
+        List<RecordComponentOutline> recordComponents,
+        List<String> enumConstants,
         List<FieldOutline> fields,
         List<MethodOutline> methods,
         int bytecodeMajorVersion
 ) {
+    public record RecordComponentOutline(
+            String type,
+            String name
+    ) {}
+
     public record FieldOutline(
             String name,
             String descriptor,
@@ -57,7 +66,20 @@ public record ClassOutline(
         }
         sb.append(classKind).append(" ").append(simpleName(className));
 
-        if (superClassName != null && !superClassName.equals("java/lang/Object") && !superClassName.isEmpty()) {
+        // Render record components e.g. record User(String name, int age)
+        if ("record".equals(classKind) && recordComponents != null && !recordComponents.isEmpty()) {
+            sb.append("(");
+            for (int i = 0; i < recordComponents.size(); i++) {
+                RecordComponentOutline rc = recordComponents.get(i);
+                sb.append(rc.type()).append(" ").append(rc.name());
+                if (i < recordComponents.size() - 1) {
+                    sb.append(", ");
+                }
+            }
+            sb.append(")");
+        }
+
+        if (!"record".equals(classKind) && superClassName != null && !superClassName.equals("java/lang/Object") && !superClassName.equals("java/lang/Record") && !superClassName.isEmpty()) {
             sb.append(" extends ").append(simpleName(superClassName));
         }
 
@@ -67,9 +89,20 @@ public record ClassOutline(
 
         sb.append(" {\n");
 
+        // Render enum constants e.g. ACTIVE, INACTIVE;
+        if ("enum".equals(classKind) && enumConstants != null && !enumConstants.isEmpty()) {
+            sb.append("    ");
+            sb.append(String.join(", ", enumConstants));
+            sb.append(";\n\n");
+        }
+
         if (fields != null && !fields.isEmpty()) {
-            sb.append("    // Fields\n");
+            boolean hasHeader = false;
             for (FieldOutline field : fields) {
+                if (!hasHeader) {
+                    sb.append("    // Fields\n");
+                    hasHeader = true;
+                }
                 for (String ann : field.annotations()) {
                     sb.append("    @").append(ann).append("\n");
                 }
@@ -79,7 +112,9 @@ public record ClassOutline(
                 }
                 sb.append(field.descriptor()).append(" ").append(field.name()).append(";\n");
             }
-            sb.append("\n");
+            if (hasHeader) {
+                sb.append("\n");
+            }
         }
 
         if (methods != null && !methods.isEmpty()) {
