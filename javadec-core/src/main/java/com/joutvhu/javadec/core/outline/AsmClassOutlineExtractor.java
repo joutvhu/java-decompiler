@@ -38,7 +38,7 @@ public class AsmClassOutlineExtractor {
 
         ClassReader reader = new ClassReader(compatibleBytecode);
         ClassNode classNode = new ClassNode();
-        reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
+        reader.accept(classNode, ClassReader.SKIP_FRAMES);
 
         String internalName = classNode.name;
         String packageName = "";

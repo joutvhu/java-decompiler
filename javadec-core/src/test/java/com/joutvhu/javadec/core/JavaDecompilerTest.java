@@ -15,6 +15,7 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -22,36 +23,100 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class JavaDecompilerTest {
 
+    private static File buildTestJar(File targetJar) throws Exception {
+        String sampleServiceSrc = """
+                package com.joutvhu.javadec.test;
+                public class SampleService {
+                    public static void main(String[] args) {
+                        System.out.println("Line 1");
+                        System.out.println("Line 2");
+                        System.out.println("Line 3");
+                        System.out.println("Line 4");
+                        System.out.println("Line 5");
+                        System.out.println("Line 6");
+                        System.out.println("Line 7");
+                        System.out.println("Line 8");
+                        System.out.println("Line 9");
+                        System.out.println("Line 10");
+                        System.out.println("Line 11");
+                        System.out.println("Line 12");
+                        System.out.println("Line 13");
+                        System.out.println("Line 14");
+                        System.out.println("Line 15");
+                    }
+                }
+                """;
+
+        String classWriterSrc = """
+                package com.joutvhu.javadec.test;
+                public class ClassWriter {
+                    public static class MType {
+                        private String typeName;
+                    }
+                }
+                """;
+
+        Map<String, byte[]> c1 = TestCompiler.compile("com.joutvhu.javadec.test.SampleService", sampleServiceSrc);
+        Map<String, byte[]> c2 = TestCompiler.compile("com.joutvhu.javadec.test.ClassWriter", classWriterSrc);
+
+        String testXml = """
+                <javadec-plugin>
+                  <id>com.joutvhu.javadec</id>
+                  <name>Java Decompiler</name>
+                  <version>1.0</version>
+                  <description>Test plugin description</description>
+                  <vendor>joutvhu</vendor>
+                </javadec-plugin>
+                """;
+
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(targetJar))) {
+            for (Map.Entry<String, byte[]> entry : c1.entrySet()) {
+                zos.putNextEntry(new ZipEntry(entry.getKey().replace('.', '/') + ".class"));
+                zos.write(entry.getValue());
+                zos.closeEntry();
+            }
+            for (Map.Entry<String, byte[]> entry : c2.entrySet()) {
+                zos.putNextEntry(new ZipEntry(entry.getKey().replace('.', '/') + ".class"));
+                zos.write(entry.getValue());
+                zos.closeEntry();
+            }
+            zos.putNextEntry(new ZipEntry("META-INF/javadec-test.xml"));
+            zos.write(testXml.getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+        return targetJar;
+    }
+
     @Test
     public void testFullDecompilerCapabilities(@TempDir Path tempDir) throws Exception {
         JavaDecompiler decompiler = new JavaDecompiler();
-        File jarFile = new File("../.source/jetbrains/java-decompiler.jar");
-        assertTrue(jarFile.exists(), "Reference jar must exist");
+        File jarFile = buildTestJar(tempDir.resolve("test-artifact.jar").toFile());
+        assertTrue(jarFile.exists(), "Test jar must exist");
 
         // 1. Test inspectArchiveTree with path and depth
         ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, "META-INF", 2);
         assertNotNull(tree);
-        assertTrue(tree.formattedTree().contains("plugin.xml"), "Tree filtered to META-INF should contain plugin.xml");
+        assertTrue(tree.formattedTree().contains("javadec-test.xml"), "Tree filtered to META-INF should contain javadec-test.xml");
 
         // 2. Test readArchiveResource with pagination (lines 1 to 5)
-        String pluginXml = decompiler.readArchiveResource(jarFile, "META-INF/plugin.xml", 1, 5);
-        assertNotNull(pluginXml);
-        assertEquals(5, pluginXml.split("\r?\n").length, "Should read exactly 5 lines");
+        String testXml = decompiler.readArchiveResource(jarFile, "META-INF/javadec-test.xml", 1, 5);
+        assertNotNull(testXml);
+        assertEquals(5, testXml.split("\r?\n").length, "Should read exactly 5 lines");
 
         // 3. Test listArchiveClasses with glob / package pattern
-        List<String> classes = decompiler.listArchiveClasses(jarFile, "*ConsoleDecompiler*");
-        assertFalse(classes.isEmpty(), "ConsoleDecompiler class must be found");
+        List<String> classes = decompiler.listArchiveClasses(jarFile, "*SampleService*");
+        assertFalse(classes.isEmpty(), "SampleService class must be found");
         String targetClass = classes.get(0);
 
         // 4. Test getArchiveClassOutline
         ClassOutline outline = decompiler.getArchiveClassOutline(jarFile, targetClass);
         assertNotNull(outline);
-        assertEquals("ConsoleDecompiler", outline.className().substring(outline.className().lastIndexOf('/') + 1));
+        assertEquals("SampleService", outline.className().substring(outline.className().lastIndexOf('/') + 1));
         String skeleton = outline.toSkeletonSource();
-        assertTrue(skeleton.contains("ConsoleDecompiler"));
+        assertTrue(skeleton.contains("SampleService"));
 
         // 5. Test inner class resolution with dot notation (e.g. ClassWriter.MType instead of $)
-        byte[] innerBytes = ZipBytecodeLoader.loadClassBytes(jarFile, "org/jetbrains/java/decompiler/main/ClassWriter.MType.class");
+        byte[] innerBytes = ZipBytecodeLoader.loadClassBytes(jarFile, "com/joutvhu/javadec/test/ClassWriter.MType.class");
         assertNotNull(innerBytes, "Must resolve inner class with dot notation");
         ClassOutline innerOutline = decompiler.getOutline(innerBytes);
         assertNotNull(innerOutline);
@@ -70,19 +135,19 @@ public class JavaDecompilerTest {
 
         // 8. Test extractArchive (raw extraction)
         File rawExtractDir = tempDir.resolve("raw").toFile();
-        int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "ConsoleDecompiler");
-        assertTrue(extracted > 0, "Must extract ConsoleDecompiler");
-        File extractedClassFile = new File(rawExtractDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
+        int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "SampleService");
+        assertTrue(extracted > 0, "Must extract SampleService");
+        File extractedClassFile = new File(rawExtractDir, "com/joutvhu/javadec/test/SampleService.class");
         assertTrue(extractedClassFile.exists(), "Extracted .class file must exist on disk");
 
         // 9. Test standalone file methods (getClassOutline, decompileFile, decompileFileMethod)
         ClassOutline standaloneOutline = decompiler.getClassOutline(extractedClassFile);
         assertNotNull(standaloneOutline);
-        assertEquals("ConsoleDecompiler", standaloneOutline.className().substring(standaloneOutline.className().lastIndexOf('/') + 1));
+        assertEquals("SampleService", standaloneOutline.className().substring(standaloneOutline.className().lastIndexOf('/') + 1));
 
         String standaloneSource = decompiler.decompileFile(extractedClassFile, DecompileOptions.defaults());
         assertNotNull(standaloneSource);
-        assertTrue(standaloneSource.contains("ConsoleDecompiler"));
+        assertTrue(standaloneSource.contains("SampleService"));
 
         String standaloneMethod = decompiler.decompileFileMethod(extractedClassFile, "main", DecompileOptions.defaults());
         assertNotNull(standaloneMethod);
@@ -90,10 +155,10 @@ public class JavaDecompilerTest {
 
         // 10. Test exportArchive (full decompilation to .java files)
         File decompiledDir = tempDir.resolve("decompiled").toFile();
-        ExportResult exportResult = decompiler.exportArchive(jarFile, decompiledDir, "ConsoleDecompiler", DecompileOptions.defaults());
+        ExportResult exportResult = decompiler.exportArchive(jarFile, decompiledDir, "SampleService", DecompileOptions.defaults());
         assertNotNull(exportResult);
         assertTrue(exportResult.decompiledClasses() > 0, "Must decompile at least 1 class");
-        File expectedJavaFile = new File(decompiledDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.java");
+        File expectedJavaFile = new File(decompiledDir, "com/joutvhu/javadec/test/SampleService.java");
         assertTrue(expectedJavaFile.exists(), "Decompiled .java file must exist on disk at " + expectedJavaFile.getAbsolutePath());
 
         // 11. Test Companion Sources JAR resolution (preserves Javadoc and comments)

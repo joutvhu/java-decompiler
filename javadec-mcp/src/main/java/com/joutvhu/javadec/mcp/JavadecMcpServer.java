@@ -14,9 +14,12 @@ import io.modelcontextprotocol.spec.McpSchema;
 
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Standard MCP Server implementation powered by official Model Context Protocol Java SDK
@@ -64,8 +67,53 @@ public class JavadecMcpServer {
     }
 
     public static void main(String[] args) {
+        AtomicBoolean closed = new AtomicBoolean(false);
+        final McpSyncServer[] serverHolder = new McpSyncServer[1];
+
+        Runnable shutdownAction = () -> {
+            if (closed.compareAndSet(false, true)) {
+                if (serverHolder[0] != null) {
+                    try {
+                        serverHolder[0].close();
+                    } catch (Exception ignored) {}
+                }
+            }
+        };
+
+        // Wrap System.in to detect client disconnect (stdin EOF) and exit cleanly without hanging JVM
+        InputStream wrappedIn = new FilterInputStream(System.in) {
+            private final AtomicBoolean triggered = new AtomicBoolean(false);
+
+            private void onEof() {
+                if (triggered.compareAndSet(false, true)) {
+                    new Thread(() -> {
+                        shutdownAction.run();
+                        System.exit(0);
+                    }, "javadec-mcp-eof-shutdown").start();
+                }
+            }
+
+            @Override
+            public int read() throws IOException {
+                int b = super.read();
+                if (b == -1) {
+                    onEof();
+                }
+                return b;
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                int n = super.read(b, off, len);
+                if (n == -1) {
+                    onEof();
+                }
+                return n;
+            }
+        };
+
         StdioServerTransportProvider transportProvider =
-                new StdioServerTransportProvider(McpJsonDefaults.getMapper());
+                new StdioServerTransportProvider(McpJsonDefaults.getMapper(), wrappedIn, System.out);
 
         McpSyncServer server = McpServer.sync(transportProvider)
                 .serverInfo("javadec-mcp", "1.0.0")
@@ -414,17 +462,15 @@ public class JavadecMcpServer {
                 )
                 .build();
 
-        // Graceful shutdown hook
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                server.close();
-            } catch (Exception ignored) {}
-        }));
+        serverHolder[0] = server;
+
+        // Graceful shutdown hook coordinated idempotently
+        Runtime.getRuntime().addShutdownHook(new Thread(shutdownAction));
 
         try {
             Thread.currentThread().join();
         } catch (InterruptedException e) {
-            server.close();
+            shutdownAction.run();
         }
     }
 }

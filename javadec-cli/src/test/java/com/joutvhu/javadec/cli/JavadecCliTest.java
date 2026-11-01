@@ -13,7 +13,59 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class JavadecCliTest {
 
-    private final File refJar = new File("../.source/jetbrains/java-decompiler.jar");
+    private static File testJar;
+
+    private static synchronized File getTestJar() {
+        if (testJar != null && testJar.exists()) {
+            return testJar;
+        }
+
+        try {
+            File temp = File.createTempFile("javadec-test-", ".jar");
+            temp.deleteOnExit();
+
+            String source = """
+                    package com.joutvhu.javadec.test;
+                    public class SampleService {
+                        public static void main(String[] args) {
+                            System.out.println("SampleService CLI mock");
+                        }
+                    }
+                    """;
+            javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+            File srcDir = java.nio.file.Files.createTempDirectory("javadec-src-").toFile();
+            File clsDir = java.nio.file.Files.createTempDirectory("javadec-cls-").toFile();
+            File javaFile = new File(srcDir, "com/joutvhu/javadec/test/SampleService.java");
+            javaFile.getParentFile().mkdirs();
+            clsDir.mkdirs();
+            java.nio.file.Files.writeString(javaFile.toPath(), source);
+
+            compiler.run(null, null, null, "-parameters", "-g", "-d", clsDir.getAbsolutePath(), javaFile.getAbsolutePath());
+
+            File classFile = new File(clsDir, "com/joutvhu/javadec/test/SampleService.class");
+            byte[] classBytes = java.nio.file.Files.readAllBytes(classFile.toPath());
+
+            try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(temp))) {
+                zos.putNextEntry(new java.util.zip.ZipEntry("com/joutvhu/javadec/test/SampleService.class"));
+                zos.write(classBytes);
+                zos.closeEntry();
+
+                zos.putNextEntry(new java.util.zip.ZipEntry("META-INF/javadec-test.xml"));
+                zos.write("<javadec-test><name>Mock</name></javadec-test>".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                zos.closeEntry();
+            }
+
+            java.nio.file.Files.walk(srcDir.toPath()).sorted(java.util.Comparator.reverseOrder()).map(java.nio.file.Path::toFile).forEach(File::delete);
+            java.nio.file.Files.walk(clsDir.toPath()).sorted(java.util.Comparator.reverseOrder()).map(java.nio.file.Path::toFile).forEach(File::delete);
+
+            testJar = temp;
+            return testJar;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to prepare test JAR", e);
+        }
+    }
+
+    private final File refJar = getTestJar();
 
     @Test
     public void testCliHelpAndVersion() {
@@ -35,7 +87,7 @@ public class JavadecCliTest {
     @Test
     public void testListCommand() {
         CommandLine cmd = new CommandLine(new JavadecCli());
-        int exitCode = cmd.execute("list", refJar.getAbsolutePath(), "-p", "ConsoleDecompiler");
+        int exitCode = cmd.execute("list", refJar.getAbsolutePath(), "-p", "SampleService");
         assertEquals(0, exitCode);
     }
 
@@ -44,11 +96,11 @@ public class JavadecCliTest {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
         // 1. Target URI format
-        int code1 = cmd.execute("outline", refJar.getAbsolutePath() + "!org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
+        int code1 = cmd.execute("outline", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class");
         assertEquals(0, code1);
 
         // 2. Space separated arguments
-        int code2 = cmd.execute("outline", refJar.getAbsolutePath(), "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
+        int code2 = cmd.execute("outline", refJar.getAbsolutePath(), "com/joutvhu/javadec/test/SampleService.class");
         assertEquals(0, code2);
     }
 
@@ -56,7 +108,7 @@ public class JavadecCliTest {
     public void testViewCommandWithMethodAndPagination() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
-        int exitCode = cmd.execute("view", refJar.getAbsolutePath() + "!org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class", "-m", "main", "--limit", "5");
+        int exitCode = cmd.execute("view", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class", "-m", "main", "--limit", "5");
         assertEquals(0, exitCode);
     }
 
@@ -64,7 +116,7 @@ public class JavadecCliTest {
     public void testResourceCommandWithPagination() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
-        int exitCode = cmd.execute("resource", refJar.getAbsolutePath(), "META-INF/plugin.xml", "--offset", "1", "--limit", "5");
+        int exitCode = cmd.execute("resource", refJar.getAbsolutePath(), "META-INF/javadec-test.xml", "--offset", "1", "--limit", "5");
         assertEquals(0, exitCode);
     }
 
@@ -73,11 +125,11 @@ public class JavadecCliTest {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
         File dumpDir = tempDir.resolve("dump").toFile();
-        int dumpCode = cmd.execute("dump", refJar.getAbsolutePath(), "-o", dumpDir.getAbsolutePath(), "-p", "ConsoleDecompiler");
+        int dumpCode = cmd.execute("dump", refJar.getAbsolutePath(), "-o", dumpDir.getAbsolutePath(), "-p", "SampleService");
         assertEquals(0, dumpCode);
 
         File extractDir = tempDir.resolve("extract").toFile();
-        int extractCode = cmd.execute("extract", refJar.getAbsolutePath(), "-o", extractDir.getAbsolutePath(), "-p", "META-INF/plugin.xml");
+        int extractCode = cmd.execute("extract", refJar.getAbsolutePath(), "-o", extractDir.getAbsolutePath(), "-p", "META-INF/javadec-test.xml");
         assertEquals(0, extractCode);
     }
 

@@ -10,7 +10,55 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class JavadecMcpServerTest {
 
-    private final File refJar = new File("../.source/jetbrains/java-decompiler.jar");
+    private static File testJar;
+
+    private static synchronized File getTestJar() {
+        if (testJar != null && testJar.exists()) {
+            return testJar;
+        }
+
+        try {
+            File temp = File.createTempFile("javadec-mcp-test-", ".jar");
+            temp.deleteOnExit();
+
+            String source = """
+                    package com.joutvhu.javadec.test;
+                    public class SampleService {
+                        public static void main(String[] args) {
+                            System.out.println("SampleService MCP mock");
+                        }
+                    }
+                    """;
+            javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+            File srcDir = java.nio.file.Files.createTempDirectory("javadec-mcp-src-").toFile();
+            File clsDir = java.nio.file.Files.createTempDirectory("javadec-mcp-cls-").toFile();
+            File javaFile = new File(srcDir, "com/joutvhu/javadec/test/SampleService.java");
+            javaFile.getParentFile().mkdirs();
+            clsDir.mkdirs();
+            java.nio.file.Files.writeString(javaFile.toPath(), source);
+
+            compiler.run(null, null, null, "-parameters", "-g", "-d", clsDir.getAbsolutePath(), javaFile.getAbsolutePath());
+
+            File classFile = new File(clsDir, "com/joutvhu/javadec/test/SampleService.class");
+            byte[] classBytes = java.nio.file.Files.readAllBytes(classFile.toPath());
+
+            try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(temp))) {
+                zos.putNextEntry(new java.util.zip.ZipEntry("com/joutvhu/javadec/test/SampleService.class"));
+                zos.write(classBytes);
+                zos.closeEntry();
+            }
+
+            java.nio.file.Files.walk(srcDir.toPath()).sorted(java.util.Comparator.reverseOrder()).map(java.nio.file.Path::toFile).forEach(File::delete);
+            java.nio.file.Files.walk(clsDir.toPath()).sorted(java.util.Comparator.reverseOrder()).map(java.nio.file.Path::toFile).forEach(File::delete);
+
+            testJar = temp;
+            return testJar;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to prepare test JAR", e);
+        }
+    }
+
+    private final File refJar = getTestJar();
 
     @Test
     public void testIsArchiveFile() {
@@ -46,7 +94,7 @@ public class JavadecMcpServerTest {
     public void testValidateTarget() {
         // Valid archive target
         assertDoesNotThrow(() -> {
-            JavadecMcpServer.validateTarget(refJar.getAbsolutePath() + "!org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
+            JavadecMcpServer.validateTarget(refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class");
         });
 
         // Null target throws IllegalArgumentException

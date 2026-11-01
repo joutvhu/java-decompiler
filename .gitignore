@@ -150,6 +150,7 @@ vite.config.ts.timestamp-*
 
 .idea/
 .kiro/
+.source/
 target/
 *.class
 jars/
