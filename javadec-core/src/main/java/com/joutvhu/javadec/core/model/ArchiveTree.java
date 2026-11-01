@@ -18,15 +18,17 @@ public record ArchiveTree(
 ) {
 
     private static final int MAX_CHILDREN_PER_DIR = 15;
+    private static final List<String> ARCHIVE_PREFIXES = List.of("BOOT-INF/classes/", "WEB-INF/classes/");
 
     public static ArchiveTree build(String archiveName, long totalSize, Map<String, Long> entries, String subPath, Integer maxDepth) {
         int depthLimit = (maxDepth != null && maxDepth > 0) ? maxDepth : 3;
         String normalizedSubPath = (subPath != null && !subPath.isBlank())
-                ? subPath.trim().replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "")
+                ? subPath.trim().replace('\\', '/').replace('.', '/').replaceAll("^/+", "").replaceAll("/+$", "")
                 : "";
 
         int classCount = 0;
         int resourceCount = 0;
+        long filteredSize = 0;
         Set<String> packages = new TreeSet<>();
         List<String> resources = new ArrayList<>();
 
@@ -36,18 +38,30 @@ public record ArchiveTree(
             String path = entry.getKey().replace('\\', '/');
             if (path.endsWith("/")) continue;
 
-            // Filter by subPath if specified
+            String cleanPath = path;
+            for (String pfx : ARCHIVE_PREFIXES) {
+                if (cleanPath.startsWith(pfx)) {
+                    cleanPath = cleanPath.substring(pfx.length());
+                    break;
+                }
+            }
+
+            // Filter by subPath if specified (matches against raw path or clean path)
             if (!normalizedSubPath.isEmpty()) {
-                if (!path.startsWith(normalizedSubPath + "/") && !path.equals(normalizedSubPath)) {
+                boolean matchesPath = path.startsWith(normalizedSubPath + "/") || path.equals(normalizedSubPath);
+                boolean matchesClean = cleanPath.startsWith(normalizedSubPath + "/") || cleanPath.equals(normalizedSubPath);
+                if (!matchesPath && !matchesClean) {
                     continue;
                 }
             }
 
+            filteredSize += entry.getValue();
+
             if (path.endsWith(".class")) {
                 classCount++;
-                int lastSlash = path.lastIndexOf('/');
+                int lastSlash = cleanPath.lastIndexOf('/');
                 if (lastSlash > 0) {
-                    String pkg = path.substring(0, lastSlash).replace('/', '.');
+                    String pkg = cleanPath.substring(0, lastSlash).replace('/', '.');
                     int dotIdx = pkg.indexOf('.');
                     packages.add(dotIdx > 0 ? pkg.substring(0, pkg.indexOf('.', dotIdx + 1) > 0 ? pkg.indexOf('.', dotIdx + 1) : pkg.length()) : pkg);
                 }
@@ -61,7 +75,19 @@ public record ArchiveTree(
             }
 
             // Build relative hierarchy
-            String relativePath = normalizedSubPath.isEmpty() ? path : path.substring(normalizedSubPath.length()).replaceAll("^/+", "");
+            String relativePath;
+            if (normalizedSubPath.isEmpty()) {
+                relativePath = path;
+            } else if (cleanPath.startsWith(normalizedSubPath + "/")) {
+                relativePath = cleanPath.substring(normalizedSubPath.length()).replaceAll("^/+", "");
+            } else if (cleanPath.equals(normalizedSubPath)) {
+                relativePath = cleanPath.substring(Math.max(0, cleanPath.lastIndexOf('/') + 1));
+            } else if (path.startsWith(normalizedSubPath + "/")) {
+                relativePath = path.substring(normalizedSubPath.length()).replaceAll("^/+", "");
+            } else {
+                relativePath = path.substring(Math.max(0, path.lastIndexOf('/') + 1));
+            }
+
             if (relativePath.isEmpty()) continue;
 
             String[] segments = relativePath.split("/");
@@ -75,7 +101,13 @@ public record ArchiveTree(
 
         StringBuilder sb = new StringBuilder();
         String headerTitle = normalizedSubPath.isEmpty() ? archiveName : archiveName + "!" + normalizedSubPath;
-        sb.append(headerTitle).append(" (").append(formatBytes(totalSize)).append(", ")
+        sb.append(headerTitle).append(" (");
+        if (normalizedSubPath.isEmpty()) {
+            sb.append(formatBytes(totalSize));
+        } else {
+            sb.append(formatBytes(filteredSize)).append(" of ").append(formatBytes(totalSize));
+        }
+        sb.append(", ")
                 .append(classCount).append(" classes, ")
                 .append(resourceCount).append(" resources, depth=").append(depthLimit).append(")\n");
         renderTree(root, "", sb, 0, depthLimit);
