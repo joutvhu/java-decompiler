@@ -21,20 +21,19 @@ public class JavaDecompilerTest {
         File jarFile = new File("../.source/jetbrains/java-decompiler.jar");
         assertTrue(jarFile.exists(), "Reference jar must exist");
 
-        // 1. Test inspectArchiveTree
-        ArchiveTree tree = decompiler.inspectArchiveTree(jarFile);
+        // 1. Test inspectArchiveTree with path and depth
+        ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, "META-INF", 2);
         assertNotNull(tree);
-        assertTrue(tree.totalClasses() > 0, "Classes count must be > 0");
-        assertTrue(tree.totalResources() > 0, "Resources count must be > 0");
-        System.out.println("=== ARCHIVE TREE ===");
+        assertTrue(tree.formattedTree().contains("plugin.xml"), "Tree filtered to META-INF should contain plugin.xml");
+        System.out.println("=== ARCHIVE TREE (META-INF, depth 2) ===");
         System.out.println(tree.formattedTree());
 
-        // 2. Test readArchiveResource (plugin.xml)
-        String pluginXml = decompiler.readArchiveResource(jarFile, "META-INF/plugin.xml");
+        // 2. Test readArchiveResource with pagination (lines 1 to 5)
+        String pluginXml = decompiler.readArchiveResource(jarFile, "META-INF/plugin.xml", 1, 5);
         assertNotNull(pluginXml);
-        assertTrue(pluginXml.contains("<idea-plugin"), "Resource should contain <idea-plugin");
-        System.out.println("=== RESOURCE PREVIEW ===");
-        System.out.println(pluginXml.substring(0, Math.min(200, pluginXml.length())));
+        assertEquals(5, pluginXml.split("\r?\n").length, "Should read exactly 5 lines");
+        System.out.println("=== RESOURCE PAGINATED (5 lines) ===");
+        System.out.println(pluginXml);
 
         // 3. Test listArchiveClasses
         List<String> classes = decompiler.listArchiveClasses(jarFile, "ConsoleDecompiler");
@@ -50,10 +49,11 @@ public class JavaDecompilerTest {
         System.out.println(skeleton);
         assertTrue(skeleton.contains("ConsoleDecompiler"));
 
-        // 5. Test decompileArchiveClass
-        String source = decompiler.decompileArchiveClass(jarFile, targetClass, DecompileOptions.defaults());
+        // 5. Test decompileArchiveClass with line pagination (lines 10 to 15)
+        DecompileOptions pagedOptions = DecompileOptions.builder().lineOffset(10).lineLimit(6).build();
+        String source = decompiler.decompileArchiveClass(jarFile, targetClass, pagedOptions);
         assertNotNull(source);
-        assertTrue(source.contains("ConsoleDecompiler"));
+        assertEquals(6, source.split("\r?\n").length, "Decompiled source should have 6 paginated lines");
 
         // 6. Test decompileArchiveMethod
         String methodSource = decompiler.decompileArchiveMethod(jarFile, targetClass, "main", DecompileOptions.defaults());

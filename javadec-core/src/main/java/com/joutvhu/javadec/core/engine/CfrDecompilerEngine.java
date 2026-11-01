@@ -11,6 +11,7 @@ import com.joutvhu.javadec.engine.bytecode.analysis.parse.utils.Pair;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.*;
 
 /**
@@ -25,20 +26,22 @@ public class CfrDecompilerEngine implements DecompilerEngine {
 
     @Override
     public String decompile(String className, byte[] bytecode, DecompileOptions options) {
-        return decompileWithContext(className, bytecode, null, options);
+        return decompileWithContext(className, bytecode, null, null, options);
     }
 
     /**
-     * Decompiles a class with optional archive file context for resolving inner/anonymous classes.
+     * Decompiles a class with optional archive file context or folder context for resolving inner/anonymous classes.
      */
-    public String decompileWithContext(String className, byte[] bytecode, File archiveFile, DecompileOptions options) {
+    public String decompileWithContext(String className, byte[] bytecode, File archiveFile, File baseDir, DecompileOptions options) {
         String cleanName = className.replace('\\', '/');
         if (cleanName.endsWith(".class")) {
             cleanName = cleanName.substring(0, cleanName.length() - 6);
+        } else if (cleanName.endsWith(".java")) {
+            cleanName = cleanName.substring(0, cleanName.length() - 5);
         }
         String classPath = cleanName.replace('.', '/') + ".class";
 
-        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile);
+        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile, baseDir);
         MemoryOutputSinkFactory sinkFactory = new MemoryOutputSinkFactory();
 
         Map<String, String> cfrOptions = new HashMap<>();
@@ -65,11 +68,13 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         private final String classPath;
         private final byte[] bytecode;
         private final File archiveFile;
+        private final File baseDir;
 
-        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile) {
+        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile, File baseDir) {
             this.classPath = classPath;
             this.bytecode = bytecode;
             this.archiveFile = archiveFile;
+            this.baseDir = baseDir;
         }
 
         @Override
@@ -92,12 +97,27 @@ public class CfrDecompilerEngine implements DecompilerEngine {
                 return Pair.make(bytecode, classPath);
             }
 
-            // Resolve sibling/inner classes from archive if available
+            // 1. Resolve sibling/inner classes from archive if available
             if (archiveFile != null && archiveFile.exists()) {
                 try {
                     byte[] innerBytes = ZipBytecodeLoader.loadClassBytes(archiveFile, normalizedRequested);
                     return Pair.make(innerBytes, normalizedRequested);
                 } catch (IOException ignored) {}
+            }
+
+            // 2. Resolve sibling/inner classes from directory on disk if available
+            if (baseDir != null && baseDir.exists()) {
+                File candidate = new File(baseDir, normalizedRequested);
+                if (candidate.exists() && candidate.isFile()) {
+                    return Pair.make(Files.readAllBytes(candidate.toPath()), normalizedRequested);
+                }
+                // Try simple filename match
+                int lastSlash = normalizedRequested.lastIndexOf('/');
+                String simpleFileName = lastSlash >= 0 ? normalizedRequested.substring(lastSlash + 1) : normalizedRequested;
+                File simpleCandidate = new File(baseDir, simpleFileName);
+                if (simpleCandidate.exists() && simpleCandidate.isFile()) {
+                    return Pair.make(Files.readAllBytes(simpleCandidate.toPath()), simpleCandidate.getName());
+                }
             }
 
             throw new FileNotFoundException("Cannot find classfile " + path);

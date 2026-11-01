@@ -45,10 +45,16 @@ public class JavadecCli implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .jar or .zip archive")
         private File jarFile;
 
+        @Option(names = {"--path", "-p"}, description = "Starting sub-path/folder inside archive (e.g. META-INF, org/springframework)")
+        private String path;
+
+        @Option(names = {"--depth", "-d"}, description = "Maximum tree depth to render (default: 3)")
+        private Integer depth;
+
         @Override
         public Integer call() throws Exception {
             JavaDecompiler decompiler = new JavaDecompiler();
-            ArchiveTree tree = decompiler.inspectArchiveTree(jarFile);
+            ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, path, depth);
             System.out.println(tree.formattedTree());
             return 0;
         }
@@ -95,7 +101,7 @@ public class JavadecCli implements Callable<Integer> {
         }
     }
 
-    @Command(name = "view", description = "Decompile full class or selectively inspect a single method")
+    @Command(name = "view", description = "Decompile full class or selectively inspect a single method with pagination")
     static class ViewCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath>")
         private String target;
@@ -106,11 +112,19 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"-l", "--lines"}, description = "Display bytecode line number mappings")
         private boolean showLines;
 
+        @Option(names = {"--offset"}, description = "1-based starting line number to read from")
+        private Integer offset;
+
+        @Option(names = {"--limit"}, description = "Number of lines to read")
+        private Integer limit;
+
         @Override
         public Integer call() throws Exception {
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder()
                     .showLineNumbers(showLines)
+                    .lineOffset(offset)
+                    .lineLimit(limit)
                     .build();
 
             if (target.contains("!")) {
@@ -140,7 +154,7 @@ public class JavadecCli implements Callable<Integer> {
         }
     }
 
-    @Command(name = "resource", description = "Read non-class resource text (.properties, .yml, .xml, MANIFEST.MF, etc.) directly from archive")
+    @Command(name = "resource", description = "Read non-class resource text (.properties, .yml, .xml, MANIFEST.MF, etc.) directly from archive with pagination")
     static class ResourceCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .jar or .zip archive")
         private File jarFile;
@@ -148,10 +162,16 @@ public class JavadecCli implements Callable<Integer> {
         @Parameters(index = "1", description = "Relative resource path (e.g. META-INF/MANIFEST.MF, application.yml)")
         private String resourcePath;
 
+        @Option(names = {"--offset"}, description = "1-based starting line number to read from")
+        private Integer offset;
+
+        @Option(names = {"--limit"}, description = "Number of lines to read")
+        private Integer limit;
+
         @Override
         public Integer call() throws Exception {
             JavaDecompiler decompiler = new JavaDecompiler();
-            String content = decompiler.readArchiveResource(jarFile, resourcePath);
+            String content = decompiler.readArchiveResource(jarFile, resourcePath, offset, limit);
             System.out.println(content);
             return 0;
         }

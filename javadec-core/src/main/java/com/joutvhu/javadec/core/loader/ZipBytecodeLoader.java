@@ -12,8 +12,11 @@ import java.util.zip.ZipFile;
 
 /**
  * High-performance reader and extractor for JAR/ZIP archives and in-memory bytecode/resources.
+ * Natively supports standard JARs, Spring Boot executable fat JARs (BOOT-INF/classes), and WARs (WEB-INF/classes).
  */
 public class ZipBytecodeLoader {
+
+    private static final String[] ARCHIVE_CLASS_PREFIXES = {"", "BOOT-INF/classes/", "WEB-INF/classes/"};
 
     public static List<String> listClasses(File archiveFile, String filterPattern) throws IOException {
         List<String> classes = new ArrayList<>();
@@ -26,12 +29,20 @@ public class ZipBytecodeLoader {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
                 if (name.endsWith(".class") && !entry.isDirectory()) {
-                    String className = name.substring(0, name.length() - 6);
+                    String cleanName = name;
+                    for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                        if (!prefix.isEmpty() && cleanName.startsWith(prefix)) {
+                            cleanName = cleanName.substring(prefix.length());
+                            break;
+                        }
+                    }
+
+                    String className = cleanName.substring(0, cleanName.length() - 6);
                     if (filterPattern == null || filterPattern.isEmpty()) {
                         classes.add(className);
                     } else {
                         String dottedName = className.replace('/', '.');
-                        if (className.contains(slashFilter) || dottedName.contains(dotFilter)) {
+                        if (className.contains(slashFilter) || dottedName.contains(dotFilter) || name.contains(slashFilter)) {
                             classes.add(className);
                         }
                     }
@@ -45,49 +56,68 @@ public class ZipBytecodeLoader {
         String cleanPath = classPath.replace('\\', '/');
         if (cleanPath.endsWith(".class")) {
             cleanPath = cleanPath.substring(0, cleanPath.length() - 6);
+        } else if (cleanPath.endsWith(".java")) {
+            cleanPath = cleanPath.substring(0, cleanPath.length() - 5);
         }
         String normalizedPath = cleanPath.replace('.', '/') + ".class";
 
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
-            ZipEntry entry = zipFile.getEntry(normalizedPath);
-            if (entry == null) {
-                // Try case-insensitive lookup as fallback
-                Enumeration<? extends ZipEntry> entries = zipFile.entries();
-                while (entries.hasMoreElements()) {
-                    ZipEntry e = entries.nextElement();
-                    if (e.getName().equalsIgnoreCase(normalizedPath)) {
-                        entry = e;
-                        break;
+            // 1. Direct and prefix lookups (standard, Spring Boot BOOT-INF, WAR WEB-INF)
+            for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                String fullPath = prefix + normalizedPath;
+                ZipEntry entry = zipFile.getEntry(fullPath);
+                if (entry != null) {
+                    try (InputStream is = zipFile.getInputStream(entry)) {
+                        return is.readAllBytes();
                     }
                 }
             }
 
-            if (entry == null) {
-                throw new IOException("Class not found: " + classPath + " in archive: " + archiveFile.getAbsolutePath());
+            // 2. Case-insensitive fallback
+            Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry e = entries.nextElement();
+                String name = e.getName();
+                for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                    if (name.equalsIgnoreCase(prefix + normalizedPath)) {
+                        try (InputStream is = zipFile.getInputStream(e)) {
+                            return is.readAllBytes();
+                        }
+                    }
+                }
             }
 
-            try (InputStream is = zipFile.getInputStream(entry)) {
-                return is.readAllBytes();
-            }
+            throw new IOException("Class not found: " + classPath + " in archive: " + archiveFile.getAbsolutePath());
         }
     }
 
     /**
-     * Reads text content of any non-class resource file (e.g. .yml, .properties, .xml, MANIFEST.MF) from archive.
+     * Reads text content of any non-class resource file from archive with optional line offset/limit.
      */
-    public static String readResourceText(File archiveFile, String resourcePath) throws IOException {
+    public static String readResourceText(File archiveFile, String resourcePath, Integer lineOffset, Integer lineLimit) throws IOException {
         String normalized = resourcePath.replace('\\', '/').replaceAll("^/+", "");
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
-            ZipEntry entry = zipFile.getEntry(normalized);
+            // 1. Direct and prefix lookups
+            ZipEntry entry = null;
+            for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                String fullPath = prefix + normalized;
+                entry = zipFile.getEntry(fullPath);
+                if (entry != null) break;
+            }
+
+            // 2. Case-insensitive fallback
             if (entry == null) {
-                // Case-insensitive lookup
                 Enumeration<? extends ZipEntry> entries = zipFile.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry e = entries.nextElement();
-                    if (e.getName().equalsIgnoreCase(normalized)) {
-                        entry = e;
-                        break;
+                    String name = e.getName();
+                    for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                        if (name.equalsIgnoreCase(prefix + normalized)) {
+                            entry = e;
+                            break;
+                        }
                     }
+                    if (entry != null) break;
                 }
             }
 
@@ -95,16 +125,51 @@ public class ZipBytecodeLoader {
                 throw new IOException("Resource not found: '" + resourcePath + "' in archive: " + archiveFile.getAbsolutePath());
             }
 
+            String fullText;
             try (InputStream is = zipFile.getInputStream(entry)) {
-                return new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                fullText = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }
+
+            return paginateLines(fullText, lineOffset, lineLimit);
         }
     }
 
+    public static String readResourceText(File archiveFile, String resourcePath) throws IOException {
+        return readResourceText(archiveFile, resourcePath, null, null);
+    }
+
     /**
-     * Inspects archive hierarchy and returns a compact structured ArchiveTree.
+     * Paginates text by 1-based start line and line limit.
      */
-    public static ArchiveTree inspectTree(File archiveFile) throws IOException {
+    public static String paginateLines(String text, Integer lineOffset, Integer lineLimit) {
+        if (text == null || (lineOffset == null && lineLimit == null)) {
+            return text;
+        }
+
+        String[] lines = text.split("\r?\n", -1);
+        int totalLines = lines.length;
+        int start = (lineOffset != null && lineOffset > 0) ? lineOffset - 1 : 0;
+        if (start >= totalLines) {
+            return "// Offset line " + lineOffset + " exceeds total line count (" + totalLines + ").";
+        }
+
+        int limit = (lineLimit != null && lineLimit > 0) ? lineLimit : totalLines - start;
+        int end = Math.min(start + limit, totalLines);
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < end; i++) {
+            sb.append(lines[i]);
+            if (i < end - 1) {
+                sb.append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Inspects archive hierarchy with custom root folder filter and max depth.
+     */
+    public static ArchiveTree inspectTree(File archiveFile, String subPath, Integer maxDepth) throws IOException {
         Map<String, Long> entriesMap = new LinkedHashMap<>();
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -113,16 +178,15 @@ public class ZipBytecodeLoader {
                 entriesMap.put(entry.getName(), entry.getSize() >= 0 ? entry.getSize() : 0);
             }
         }
-        return ArchiveTree.build(archiveFile.getName(), archiveFile.length(), entriesMap);
+        return ArchiveTree.build(archiveFile.getName(), archiveFile.length(), entriesMap, subPath, maxDepth);
+    }
+
+    public static ArchiveTree inspectTree(File archiveFile) throws IOException {
+        return inspectTree(archiveFile, null, 3);
     }
 
     /**
      * Extracts files from archive to a target directory.
-     *
-     * @param archiveFile the JAR/ZIP file
-     * @param targetDir   destination directory
-     * @param pathFilter  optional prefix or file filter (null extracts all)
-     * @return number of files extracted
      */
     public static int extractArchive(File archiveFile, File targetDir, String pathFilter) throws IOException {
         if (!targetDir.exists()) {

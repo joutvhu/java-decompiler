@@ -4,10 +4,11 @@ import java.util.*;
 
 /**
  * Represents a hierarchical tree structure of entries in a JAR/ZIP archive.
- * Summarizes packages, classes, and resource files with compact token usage for AI agents.
+ * Summarizes packages, classes, and resource files with configurable root path and depth.
  */
 public record ArchiveTree(
         String archiveName,
+        String subPath,
         long totalSize,
         int totalClasses,
         int totalResources,
@@ -16,7 +17,14 @@ public record ArchiveTree(
         String formattedTree
 ) {
 
-    public static ArchiveTree build(String archiveName, long totalSize, Map<String, Long> entries) {
+    private static final int MAX_CHILDREN_PER_DIR = 15;
+
+    public static ArchiveTree build(String archiveName, long totalSize, Map<String, Long> entries, String subPath, Integer maxDepth) {
+        int depthLimit = (maxDepth != null && maxDepth > 0) ? maxDepth : 3;
+        String normalizedSubPath = (subPath != null && !subPath.isBlank())
+                ? subPath.trim().replace('\\', '/').replaceAll("^/+", "").replaceAll("/+$", "")
+                : "";
+
         int classCount = 0;
         int resourceCount = 0;
         Set<String> packages = new TreeSet<>();
@@ -27,6 +35,13 @@ public record ArchiveTree(
         for (Map.Entry<String, Long> entry : entries.entrySet()) {
             String path = entry.getKey();
             if (path.endsWith("/")) continue;
+
+            // Filter by subPath if specified
+            if (!normalizedSubPath.isEmpty()) {
+                if (!path.startsWith(normalizedSubPath + "/") && !path.equals(normalizedSubPath)) {
+                    continue;
+                }
+            }
 
             if (path.endsWith(".class")) {
                 classCount++;
@@ -45,8 +60,11 @@ public record ArchiveTree(
                 }
             }
 
-            // Build hierarchical tree
-            String[] segments = path.split("/");
+            // Build relative hierarchy
+            String relativePath = normalizedSubPath.isEmpty() ? path : path.substring(normalizedSubPath.length()).replaceAll("^/+", "");
+            if (relativePath.isEmpty()) continue;
+
+            String[] segments = relativePath.split("/");
             TreeNode current = root;
             for (int i = 0; i < segments.length; i++) {
                 String segment = segments[i];
@@ -56,13 +74,15 @@ public record ArchiveTree(
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(archiveName).append(" (").append(formatBytes(totalSize)).append(", ")
+        String headerTitle = normalizedSubPath.isEmpty() ? archiveName : archiveName + "!" + normalizedSubPath;
+        sb.append(headerTitle).append(" (").append(formatBytes(totalSize)).append(", ")
                 .append(classCount).append(" classes, ")
-                .append(resourceCount).append(" resources)\n");
-        renderTree(root, "", sb, 0, 3); // Max depth 3 for concise overview
+                .append(resourceCount).append(" resources, depth=").append(depthLimit).append(")\n");
+        renderTree(root, "", sb, 0, depthLimit);
 
         return new ArchiveTree(
                 archiveName,
+                normalizedSubPath,
                 totalSize,
                 classCount,
                 resourceCount,
@@ -79,9 +99,15 @@ public record ArchiveTree(
             return a.name.compareToIgnoreCase(b.name);
         });
 
-        for (int i = 0; i < sorted.size(); i++) {
+        int displayCount = sorted.size();
+        boolean hasTruncation = sorted.size() > MAX_CHILDREN_PER_DIR;
+        if (hasTruncation) {
+            displayCount = 12;
+        }
+
+        for (int i = 0; i < displayCount; i++) {
             TreeNode child = sorted.get(i);
-            boolean isLast = (i == sorted.size() - 1);
+            boolean isLast = (i == displayCount - 1) && !hasTruncation;
             sb.append(prefix).append(isLast ? "└── " : "├── ").append(child.name);
             if (child.isLeaf) {
                 sb.append(" (").append(formatBytes(child.size)).append(")");
@@ -89,13 +115,17 @@ public record ArchiveTree(
             sb.append("\n");
 
             if (!child.isLeaf) {
-                if (depth < maxDepth) {
+                if (depth + 1 < maxDepth) {
                     renderTree(child, prefix + (isLast ? "    " : "│   "), sb, depth + 1, maxDepth);
                 } else if (!child.children.isEmpty()) {
                     sb.append(prefix).append(isLast ? "    " : "│   ").append("└── ... (")
                             .append(child.children.size()).append(" items)\n");
                 }
             }
+        }
+
+        if (hasTruncation) {
+            sb.append(prefix).append("└── ... and ").append(sorted.size() - displayCount).append(" more items\n");
         }
     }
 

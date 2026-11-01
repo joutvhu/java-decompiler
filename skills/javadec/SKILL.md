@@ -5,30 +5,30 @@ description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. U
 
 # Javadec - Java Bytecode & Archive Inspector for AI Agents
 
-`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It avoids dumping huge source files by offering compact tree views, zero-extraction resource reading, class outlines (skeletons), and selective method-level decompilation.
+`javadec` allows AI agents to inspect compiled Java artifacts (`.jar`, `.war`, `.zip`, `.class`) on-demand with minimal context token consumption. It avoids dumping huge source files by offering compact tree views with customizable root path/depth, zero-extraction resource reading with line pagination, class outlines (skeletons), and selective method-level decompilation.
 
 ---
 
 ## 1. Operating Strategy (Token-First Hierarchy)
 
-Never decompile an entire JAR or huge class file without inspecting outlines first. Follow this progressive hierarchy:
+Never decompile an entire JAR or huge class file without inspecting outlines or scoping the tree first. Follow this progressive hierarchy:
 
 ```
 [Target Archive / Class]
        │
-       ├──► 1. Archive Tree: inspect_archive_tree / javadec tree
-       │       Quick overview of packages, class counts, and key configs
+       ├──► 1. Scoped Archive Tree: inspect_archive_tree / javadec tree [--path <dir>] [--depth <d>]
+       │       Targeted view of packages, class counts, and key configs
        │
-       ├──► 2. Read Resource: read_jar_resource / javadec resource
+       ├──► 2. Read Resource (Paginated): read_jar_resource / javadec resource [--offset <o>] [--limit <l>]
        │       Read MANIFEST.MF, application.yml, spring.factories directly from memory
        │
        ├──► 3. Class Outline: get_class_outline / javadec outline
        │       Read signatures, interfaces, fields, and annotations (~90% token savings)
        │
-       ├──► 4. Method View: decompile_method / javadec view -m <method>
+       ├──► 4. Method View: decompile_method / javadec view -m <method> [--offset <o>] [--limit <l>]
        │       Decompile only the implementation logic of the target method
        │
-       └──► 5. Full Decompile: decompile_class / javadec view
+       └──► 5. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
                Fallback only when cross-method flow or complete class structure is required
 ```
 
@@ -40,22 +40,22 @@ Determine which execution mode is available in the current session:
 
 ### Mode A: MCP Tools (Preferred)
 When `javadec` MCP server is active in the environment, invoke MCP tools directly:
-- `inspect_archive_tree(jarPath)`
-- `read_jar_resource(jarPath, resourcePath)`
-- `list_jar_classes(jarPath, pattern?)`
-- `get_class_outline(target)`
-- `decompile_method(target, methodName)`
-- `decompile_class(target)`
-- `extract_archive(jarPath, outputDir, pathFilter?)`
+- `inspect_archive_tree(jarPath, path?, depth?)` — tree inspection with optional sub-path filter and depth limit
+- `read_jar_resource(jarPath, resourcePath, lineOffset?, lineLimit?)` — resource reader with line pagination
+- `list_jar_classes(jarPath, pattern?)` — search classes (supports `com.example` and `com/example`)
+- `get_class_outline(target)` — lightweight skeleton/signatures (~90% token savings)
+- `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads
+- `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination
+- `extract_archive(jarPath, outputDir, pathFilter?)` — extract archive files to disk
 
 ### Mode B: Shell CLI (Fallback)
 If MCP tools are not registered, execute CLI commands in the terminal using `javadec` (or `npx -y javadec`):
-- `javadec tree <jarPath>`
-- `javadec resource <jarPath> <resourcePath>`
+- `javadec tree <jarPath> [--path <subPath>] [--depth <n>]`
+- `javadec resource <jarPath> <resourcePath> [--offset <n>] [--limit <n>]`
 - `javadec list <jarPath> -p <pattern>`
 - `javadec outline <target>`
-- `javadec view <target> -m <methodName>`
-- `javadec view <target>`
+- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>]`
+- `javadec view <target> [--offset <n>] [--limit <n>]`
 - `javadec extract <jarPath> -o <outputDir> [-p <filter>]`
 
 *Note on Java Runtime: If the system default Java is older than Java 21, set `JAVADEC_JAVA_PATH` or `JAVADEC_JAVA_HOME` pointing to a JDK 21+ installation when executing CLI commands.*
@@ -78,42 +78,37 @@ When addressing a class, use the standard target URI syntax:
 
 ## 4. Workflows & Command Reference
 
-### Workflow A: Explore an Unfamiliar JAR
-1. **Get Archive Tree Overview**:
-   - MCP: `inspect_archive_tree({ "jarPath": "path/to/lib.jar" })`
-   - CLI: `javadec tree path/to/lib.jar`
-   - *Result*: Summarizes total class count, top-level package hierarchy, and list of configuration files.
+### Workflow A: Explore an Unfamiliar JAR with Scoped Tree
+1. **Get High-Level or Scoped Archive Tree**:
+   - Entire archive: `inspect_archive_tree({ "jarPath": "lib.jar", "depth": 2 })`
+   - Focused folder: `inspect_archive_tree({ "jarPath": "lib.jar", "path": "META-INF", "depth": 2 })`
+   - CLI: `javadec tree lib.jar --path org/springframework --depth 2`
 
-2. **Read Configurations & Metadata**:
-   - MCP: `read_jar_resource({ "jarPath": "path/to/lib.jar", "resourcePath": "META-INF/MANIFEST.MF" })`
-   - CLI: `javadec resource path/to/lib.jar META-INF/MANIFEST.MF`
-   - *Tip*: Also inspect `application.yml`, `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`, etc.
+2. **Read Configurations & Metadata (Chunked/Paginated if Large)**:
+   - MCP: `read_jar_resource({ "jarPath": "lib.jar", "resourcePath": "META-INF/MANIFEST.MF", "lineOffset": 1, "lineLimit": 50 })`
+   - CLI: `javadec resource lib.jar application.yml --offset 1 --limit 50`
 
 3. **Search for Specific Classes**:
-   - MCP: `list_jar_classes({ "jarPath": "path/to/lib.jar", "pattern": "Security" })`
-   - CLI: `javadec list path/to/lib.jar -p Security`
-   - *Note*: Pattern supports both dot (`com.example`) and slash (`com/example`) notation.
+   - MCP: `list_jar_classes({ "jarPath": "lib.jar", "pattern": "Security" })`
+   - CLI: `javadec list lib.jar -p com.example.security`
 
 ---
 
 ### Workflow B: Investigate Stack Traces & Method Contracts
-When debugging an exception that originates from an external library:
-
 1. **Extract Class Outline (Skeleton)**:
-   Always run outline first to verify field definitions and method signatures without bodies:
+   Always inspect outline first to verify field definitions and method signatures:
    - MCP: `get_class_outline({ "target": "lib.jar!com/example/AuthManager.class" })`
    - CLI: `javadec outline lib.jar!com/example/AuthManager.class`
-   - *Evaluation*: Inspect method parameter types, annotations (`@Transactional`, `@Nullable`), and return types.
 
-2. **Decompile Only the Problematic Method**:
+2. **Decompile Only the Problematic Method (All Overloads)**:
    Extract the exact logic of the method identified from the stack trace:
    - MCP: `decompile_method({ "target": "lib.jar!com/example/AuthManager.class", "methodName": "authenticate" })`
    - CLI: `javadec view lib.jar!com/example/AuthManager.class -m authenticate`
 
-3. **Full Decompilation (Only If Method View is Insufficient)**:
-   If variable initialization, static blocks, or inner class callbacks need to be traced:
-   - MCP: `decompile_class({ "target": "lib.jar!com/example/AuthManager.class" })`
-   - CLI: `javadec view lib.jar!com/example/AuthManager.class`
+3. **Paginated Decompilation for Large Classes**:
+   If a 2000-line class must be audited, read in chunks to keep prompt context clean:
+   - MCP: `decompile_class({ "target": "lib.jar!com/example/LargeService.class", "lineOffset": 1, "lineLimit": 100 })`
+   - CLI: `javadec view lib.jar!com/example/LargeService.class --offset 101 --limit 100`
 
 ---
 

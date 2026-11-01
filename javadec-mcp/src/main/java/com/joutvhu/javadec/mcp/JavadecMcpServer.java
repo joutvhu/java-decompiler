@@ -35,11 +35,13 @@ public class JavadecMcpServer {
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("inspect_archive_tree")
-                                .description("Inspect archive structure, returning a concise hierarchical tree, total class count, and key configuration resources")
+                                .description("Inspect archive structure, returning a hierarchical tree with optional root folder filter and max depth")
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(
-                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive")
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive"),
+                                                "path", Map.of("type", "string", "description", "Optional sub-path/folder inside archive (e.g. META-INF, org/springframework)"),
+                                                "depth", Map.of("type", "integer", "description", "Maximum tree depth to render (default: 3)")
                                         ),
                                         "required", List.of("jarPath")
                                 ))
@@ -47,7 +49,9 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
-                                ArchiveTree tree = DECOMPILER.inspectArchiveTree(new File(jarPath));
+                                String path = (String) request.arguments().get("path");
+                                Integer depth = request.arguments().get("depth") instanceof Number n ? n.intValue() : null;
+                                ArchiveTree tree = DECOMPILER.inspectArchiveTree(new File(jarPath), path, depth);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(tree.formattedTree())))
                                         .isError(false)
@@ -93,12 +97,14 @@ public class JavadecMcpServer {
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("read_jar_resource")
-                                .description("Read text content of any resource/configuration file (e.g. .yml, .properties, .xml, MANIFEST.MF, .sql) directly from archive")
+                                .description("Read text content of any resource/configuration file (e.g. .yml, .properties, .xml, MANIFEST.MF) with optional line pagination (offset/limit)")
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(
                                                 "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive"),
-                                                "resourcePath", Map.of("type", "string", "description", "Relative resource path inside archive (e.g. META-INF/MANIFEST.MF, application.yml)")
+                                                "resourcePath", Map.of("type", "string", "description", "Relative resource path inside archive (e.g. META-INF/MANIFEST.MF, application.yml)"),
+                                                "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
+                                                "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
                                         "required", List.of("jarPath", "resourcePath")
                                 ))
@@ -107,7 +113,9 @@ public class JavadecMcpServer {
                             try {
                                 String jarPath = (String) request.arguments().get("jarPath");
                                 String resourcePath = (String) request.arguments().get("resourcePath");
-                                String content = DECOMPILER.readArchiveResource(new File(jarPath), resourcePath);
+                                Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
+                                Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+                                String content = DECOMPILER.readArchiveResource(new File(jarPath), resourcePath, lineOffset, lineLimit);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(content)))
                                         .isError(false)
@@ -157,11 +165,13 @@ public class JavadecMcpServer {
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("decompile_class")
-                                .description("Decompile full class source code from a .class file or <jarPath>!<classPath>")
+                                .description("Decompile full class source code from a .class file or <jarPath>!<classPath> with optional line pagination (offset/limit)")
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(
-                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>")
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
+                                                "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
+                                                "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
                                         "required", List.of("target")
                                 ))
@@ -169,12 +179,19 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String target = (String) request.arguments().get("target");
+                                Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
+                                Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+                                DecompileOptions options = DecompileOptions.builder()
+                                        .lineOffset(lineOffset)
+                                        .lineLimit(lineLimit)
+                                        .build();
+
                                 String result;
                                 if (target.contains("!")) {
                                     String[] parts = target.split("!", 2);
-                                    result = DECOMPILER.decompileArchiveClass(new File(parts[0]), parts[1], DecompileOptions.defaults());
+                                    result = DECOMPILER.decompileArchiveClass(new File(parts[0]), parts[1], options);
                                 } else {
-                                    result = DECOMPILER.decompileFile(new File(target), DecompileOptions.defaults());
+                                    result = DECOMPILER.decompileFile(new File(target), options);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
@@ -191,12 +208,14 @@ public class JavadecMcpServer {
                 .toolCall(
                         McpSchema.Tool.builder()
                                 .name("decompile_method")
-                                .description("Selectively decompile only a single method inside a class to optimize AI context tokens")
+                                .description("Selectively decompile only a single method inside a class to optimize AI context tokens with optional line pagination")
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
-                                                "methodName", Map.of("type", "string", "description", "Name of the method to decompile")
+                                                "methodName", Map.of("type", "string", "description", "Name of the method to decompile"),
+                                                "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
+                                                "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
                                         "required", List.of("target", "methodName")
                                 ))
@@ -205,14 +224,21 @@ public class JavadecMcpServer {
                             try {
                                 String target = (String) request.arguments().get("target");
                                 String methodName = (String) request.arguments().get("methodName");
+                                Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
+                                Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+                                DecompileOptions options = DecompileOptions.builder()
+                                        .lineOffset(lineOffset)
+                                        .lineLimit(lineLimit)
+                                        .build();
+
                                 String result;
                                 if (target.contains("!")) {
                                     String[] parts = target.split("!", 2);
-                                    result = DECOMPILER.decompileArchiveMethod(new File(parts[0]), parts[1], methodName, DecompileOptions.defaults());
+                                    result = DECOMPILER.decompileArchiveMethod(new File(parts[0]), parts[1], methodName, options);
                                 } else {
                                     File f = new File(target);
                                     byte[] bytes = Files.readAllBytes(f.toPath());
-                                    result = DECOMPILER.decompileMethod(f.getName(), bytes, methodName, DecompileOptions.defaults());
+                                    result = DECOMPILER.decompileMethod(f.getName(), bytes, methodName, options);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
