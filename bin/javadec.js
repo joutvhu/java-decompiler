@@ -23,6 +23,18 @@ function parseJavaMajorVersion(javaExecutable) {
 function findInstalledModernJdk() {
     const candidates = [];
 
+    // 1. Discover all java executables on the system via where.exe (Windows) or which -a (Linux/macOS)
+    try {
+        const cmd = process.platform === 'win32' ? 'where.exe' : 'which';
+        const args = process.platform === 'win32' ? ['java'] : ['-a', 'java'];
+        const res = spawnSync(cmd, args, { encoding: 'utf8', windowsHide: true });
+        if (res.status === 0 && res.stdout) {
+            const lines = res.stdout.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+            candidates.push(...lines);
+        }
+    } catch (ignored) {}
+
+    // 2. Scan standard installation directories
     if (process.platform === 'win32') {
         const programFiles = [process.env['ProgramFiles'], process.env['ProgramFiles(x86)']];
         for (const pf of programFiles) {
@@ -124,7 +136,7 @@ function findJavaExecutable() {
         return 'java';
     }
 
-    // 5. If PATH java is too old or missing, look for installed JDK 21+
+    // 5. If PATH java is too old or missing, look for installed JDK 21+ across system
     const discovered = findInstalledModernJdk();
     if (discovered) {
         return discovered;
@@ -182,7 +194,7 @@ child.on('error', (err) => {
 });
 
 child.on('close', (code) => {
-    process.exit(code || 0);
+    process.exit(code != null ? code : 1);
 });
 
 // Forward termination signals gracefully to child JVM
