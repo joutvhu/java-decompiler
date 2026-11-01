@@ -140,9 +140,16 @@ const isMcp = args.length > 0 && args[0] === 'mcp';
 const jarName = isMcp ? 'javadec-mcp.jar' : 'javadec-cli.jar';
 const jarToRun = path.join(__dirname, '..', 'jars', jarName);
 
+// Force UTF-8 encoding across JVM console I/O to avoid mojibake box-drawing on Windows
+const defaultJvmFlags = [
+    '-Dfile.encoding=UTF-8',
+    '-Dsun.stdout.encoding=UTF-8',
+    '-Dsun.stderr.encoding=UTF-8'
+];
+
 const javaArgs = isMcp
-    ? ['-jar', jarToRun, ...args.slice(1)]
-    : ['-jar', jarToRun, ...args];
+    ? [...defaultJvmFlags, '-jar', jarToRun, ...args.slice(1)]
+    : [...defaultJvmFlags, '-jar', jarToRun, ...args];
 
 if (!fs.existsSync(jarToRun)) {
     console.error(`[javadec] Error: Core JAR not found at: ${jarToRun}`);

@@ -11,6 +11,10 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -32,6 +36,12 @@ import java.util.concurrent.Callable;
 public class JavadecCli implements Callable<Integer> {
 
     public static void main(String[] args) {
+        // Force UTF-8 for console output to guarantee clean box-drawing characters on all OS
+        try {
+            System.setOut(new PrintStream(new FileOutputStream(FileDescriptor.out), true, StandardCharsets.UTF_8));
+            System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+
         int exitCode = new CommandLine(new JavadecCli()).execute(args);
         System.exit(exitCode);
     }

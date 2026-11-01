@@ -5,6 +5,7 @@ import java.util.*;
 /**
  * Represents a hierarchical tree structure of entries in a JAR/ZIP archive.
  * Summarizes packages, classes, and resource files with configurable root path and depth.
+ * Uses ASCII-safe tree connectors to guarantee zero-mojibake across all operating systems and LLM context windows.
  */
 public record ArchiveTree(
         String archiveName,
@@ -19,6 +20,11 @@ public record ArchiveTree(
 
     private static final int MAX_CHILDREN_PER_DIR = 15;
     private static final List<String> ARCHIVE_PREFIXES = List.of("BOOT-INF/classes/", "WEB-INF/classes/");
+
+    private static final String BRANCH = "|-- ";
+    private static final String LEAF   = "\\-- ";
+    private static final String PIPE   = "|   ";
+    private static final String SPACE  = "    ";
 
     public static ArchiveTree build(String archiveName, long totalSize, Map<String, Long> entries, String subPath, Integer maxDepth) {
         int depthLimit = (maxDepth != null && maxDepth > 0) ? maxDepth : 3;
@@ -67,9 +73,12 @@ public record ArchiveTree(
                 }
             } else {
                 resourceCount++;
-                if (path.startsWith("META-INF/") || path.endsWith(".yml") || path.endsWith(".yaml")
-                        || path.endsWith(".properties") || path.endsWith(".xml") || path.endsWith(".json")
-                        || path.endsWith(".sql") || path.endsWith(".proto") || path.endsWith(".jar")) {
+                String lower = path.toLowerCase();
+                boolean isImageOrBinary = lower.endsWith(".svg") || lower.endsWith(".png") || lower.endsWith(".ico") || lower.endsWith(".jpg");
+                if (!isImageOrBinary && (lower.endsWith(".yml") || lower.endsWith(".yaml")
+                        || lower.endsWith(".properties") || lower.endsWith(".xml") || lower.endsWith(".json")
+                        || lower.endsWith(".sql") || lower.endsWith(".proto") || lower.endsWith(".factories")
+                        || lower.endsWith(".imports") || lower.endsWith(".jar") || path.equals("META-INF/MANIFEST.MF"))) {
                     resources.add(path);
                 }
             }
@@ -98,6 +107,14 @@ public record ArchiveTree(
                 current = current.children.computeIfAbsent(segment, s -> new TreeNode(s, isLeaf, isLeaf ? entry.getValue() : 0));
             }
         }
+
+        // Sort key resources: prioritize MANIFEST.MF, application config, plugin configs
+        resources.sort((a, b) -> {
+            int pA = a.contains("MANIFEST.MF") ? 0 : a.contains("application") ? 1 : a.contains("plugin.xml") ? 2 : 3;
+            int pB = b.contains("MANIFEST.MF") ? 0 : b.contains("application") ? 1 : b.contains("plugin.xml") ? 2 : 3;
+            if (pA != pB) return Integer.compare(pA, pB);
+            return a.compareToIgnoreCase(b);
+        });
 
         StringBuilder sb = new StringBuilder();
         String headerTitle = normalizedSubPath.isEmpty() ? archiveName : archiveName + "!" + normalizedSubPath;
@@ -155,7 +172,7 @@ public record ArchiveTree(
         for (int i = 0; i < displayCount; i++) {
             TreeNode child = sorted.get(i);
             boolean isLast = (i == displayCount - 1) && !hasTruncation;
-            sb.append(prefix).append(isLast ? "└── " : "├── ").append(child.name);
+            sb.append(prefix).append(isLast ? LEAF : BRANCH).append(child.name);
             if (child.isLeaf) {
                 sb.append(" (").append(formatBytes(child.size)).append(")");
             }
@@ -163,16 +180,16 @@ public record ArchiveTree(
 
             if (!child.isLeaf) {
                 if (depth + 1 < maxDepth) {
-                    renderTree(child, prefix + (isLast ? "    " : "│   "), sb, depth + 1, maxDepth);
+                    renderTree(child, prefix + (isLast ? SPACE : PIPE), sb, depth + 1, maxDepth);
                 } else if (!child.children.isEmpty()) {
-                    sb.append(prefix).append(isLast ? "    " : "│   ").append("└── ... (")
+                    sb.append(prefix).append(isLast ? SPACE : PIPE).append(LEAF).append("... (")
                             .append(child.children.size()).append(" items)\n");
                 }
             }
         }
 
         if (hasTruncation) {
-            sb.append(prefix).append("└── ... and ").append(sorted.size() - displayCount).append(" more items\n");
+            sb.append(prefix).append(LEAF).append("... and ").append(sorted.size() - displayCount).append(" more items\n");
         }
     }
 
