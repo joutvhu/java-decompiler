@@ -118,4 +118,14 @@ public class JavadecMcpServerTest {
             JavadecMcpServer.validateTarget(refJar.getAbsolutePath());
         });
     }
+
+    @Test
+    public void testFindReferencesExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.findReferences(refJar, "#main", 10, null);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
 }

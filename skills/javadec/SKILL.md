@@ -1,6 +1,6 @@
 ---
 name: "javadec"
-description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar, dump jar, export jar, javadoc, sources jar."
+description: "Universal & Token-Efficient Java Bytecode and Archive Inspector. Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, finding method/class callers and references, inspecting third-party API signatures, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode. Triggers on: decompile, decompiler, bytecode, inspect jar, jar file, class outline, class skeleton, javadec, fernflower, cfr, view method, extract jar, dump jar, export jar, javadoc, sources jar, find references, callers, find usages."
 ---
 
 # Javadec - Java Bytecode & Archive Inspector for AI Agents
@@ -25,13 +25,16 @@ Never decompile an entire JAR or huge class file without inspecting outlines or 
        ├──► 3. Class Outline: get_class_outline / javadec outline
        │       Read signatures, interfaces, fields, and annotations (~90% token savings)
        │
-       ├──► 4. Method View: decompile_method / javadec view -m <method> [--offset <o>] [--limit <l>]
+       ├──► 4. Find References & Callers: find_references / javadec find <target>
+       │       Instantly scan method callers, field accesses, or class usages with zero decompilation
+       │
+       ├──► 5. Method View: decompile_method / javadec view -m <method> [--offset <o>] [--limit <l>]
        │       Extract target method implementation (with Javadoc if -sources.jar exists)
        │
-       ├──► 5. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
+       ├──► 6. Full Decompile (Paginated): decompile_class / javadec view [--offset <o>] [--limit <l>]
        │       Auto-resolves companion -sources.jar for Javadocs, or falls back to native decompiler
        │
-       └──► 6. Export to Disk: export_archive / javadec dump -o <outputDir> [-p <filter>]
+       └──► 7. Export to Disk: export_archive / javadec dump -o <outputDir> [-p <filter>]
                Export all decompiled .java source files and resources into a directory on disk
 ```
 
@@ -56,6 +59,7 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `read_jar_resource(jarPath, resourcePath, lineOffset?, lineLimit?)` — resource reader with line pagination
 - `list_jar_classes(jarPath, pattern?)` — search classes (supports `com.example` and `com/example`)
 - `get_class_outline(target)` — lightweight skeleton/signatures (~90% token savings)
+- `find_references(jarPath, target, limit?, pathFilter?)` — ultra-fast caller/usage scanner with line numbers
 - `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads (with Javadoc if available)
 - `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination (with Javadoc if available)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
@@ -67,6 +71,7 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec resource <jarPath> <resourcePath> [--offset <n>] [--limit <n>]`
 - `javadec list <jarPath> -p <pattern>`
 - `javadec outline <target>`
+- `javadec find <jarPath> <target> [-l <limit>] [-p <filter>]` (aliases: `refs`, `usages`)
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>]`
 - `javadec view <target> [--offset <n>] [--limit <n>]`
 - `javadec dump <jarPath> -o <outputDir> [-p <filter>]` (alias: `export`)

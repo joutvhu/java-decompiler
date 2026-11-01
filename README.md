@@ -37,13 +37,16 @@ When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Works
        ├──► 3. Class Outline:          javadec outline
        │       Lightweight skeleton (signatures, fields, annotations) — ~90% token savings
        │
-       ├──► 4. Method View:            javadec view -m <method> [--offset <o>] [--limit <l>]
+       ├──► 4. Find Callers & Usages:  javadec find <target>
+       │       Scan method callers, field accesses, or class usages with line numbers in ms
+       │
+       ├──► 5. Method View:            javadec view -m <method> [--offset <o>] [--limit <l>]
        │       Decompile only the target method (with Javadoc if sources jar exists)
        │
-       ├──► 5. Full Decompile (Paged): javadec view [--offset <o>] [--limit <l>]
+       ├──► 6. Full Decompile (Paged): javadec view [--offset <o>] [--limit <l>]
        │       Auto-resolves companion -sources.jar for Javadoc, or falls back to native decompiler
        │
-       └──► 6. Export to Disk:         javadec dump -o <outputDir> [-p <filter>]
+       └──► 7. Export to Disk:         javadec dump -o <outputDir> [-p <filter>]
                Decompile entire archive or package into clean .java files on disk
 ```
 
@@ -53,6 +56,7 @@ When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Works
 
 - **📖 Sources-Aware Inspection (Javadoc Preservation)**: Automatically locates companion `<artifact>-<version>-sources.jar` in Maven local repository (`~/.m2/repository`) or Gradle cache (`~/.gradle/caches`). When present, it serves original author source code with **100% of Javadocs and inline comments intact**!
 - **⚡ Token-Efficient Skeletons via ASM (`outline`)**: Extracts full class signatures, fields, annotations, constructors, and parameter names in ~100–300 tokens without decompiling method bodies.
+- **🔍 Instant Bytecode Reference & Caller Search (`find` / `refs`)**: Scans thousands of classes in milliseconds directly in bytecode to locate all callers of a method, field reads/writes, or class instantiations with line numbers.
 - **🎯 Precision Method Decompilation (`view -m`)**: Decompiles only the targeted method (handling all overloads, constructor initializers, abstract/interface methods, and preceding annotations).
 - **📑 Line-Based Pagination (`--offset` & `--limit`)**: Read massive classes or resources in bite-sized chunks to prevent prompt context bloat.
 - **🌳 Scoped Tree Hierarchy (`tree --path --depth`)**: Zoom in on specific packages or sub-directories with configurable depth limit.
@@ -279,6 +283,7 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | **`read_jar_resource`** | `jarPath` (req), `resourcePath` (req), `lineOffset` (opt), `lineLimit` (opt) | Reads non-class text resources (`.yml`, `.properties`, `.xml`, `MANIFEST.MF`) with pagination. |
 | **`list_jar_classes`** | `jarPath` (req), `pattern` (opt) | Lists classes matching a package or substring pattern. |
 | **`get_class_outline`** | `target` (req), or (`jarPath` + `classPath`) | Extracts class skeleton/signatures without method bodies (~90% token savings). |
+| **`find_references`** | `jarPath` (req), `target` (req), `limit` (opt), `pathFilter` (opt) | Finds all callers, field accesses, or class usages directly from bytecode with line numbers. |
 | **`decompile_class`** | `target` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc). |
 | **`decompile_method`** | `target` (req), `methodName` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
 | **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Decompiles entire archive or package into `.java` files on disk. |

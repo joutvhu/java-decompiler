@@ -134,6 +134,13 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testFindCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("find", refJar.getAbsolutePath(), "#main", "--limit", "10");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

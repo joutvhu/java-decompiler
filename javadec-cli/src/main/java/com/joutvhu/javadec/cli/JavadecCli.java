@@ -6,6 +6,7 @@ import com.joutvhu.javadec.core.loader.PathUtil;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
 import com.joutvhu.javadec.core.model.ExportResult;
+import com.joutvhu.javadec.core.model.ReferenceSearchResult;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -30,6 +31,7 @@ import java.util.concurrent.Callable;
                 JavadecCli.OutlineCommand.class,
                 JavadecCli.ViewCommand.class,
                 JavadecCli.ResourceCommand.class,
+                JavadecCli.FindCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -253,6 +255,41 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             String content = decompiler.readArchiveResource(jar, resourcePath, offset, limit);
             System.out.println(content);
+            return 0;
+        }
+    }
+
+    @Command(name = "find", aliases = {"refs", "usages"}, description = "Find all callers, usages, or references of a method, field, or class in an archive")
+    static class FindCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar or .zip archive or directory")
+        private File targetFile;
+
+        @Parameters(index = "1", description = "Target to find, e.g. 'com/example/Service#method', '#methodName', or 'com/example/MyClass'")
+        private String targetQuery;
+
+        @Option(names = {"-l", "--limit"}, description = "Maximum number of references to return (default: 100)")
+        private Integer limit;
+
+        @Option(names = {"-p", "--path"}, description = "Optional package or path filter inside archive")
+        private String pathFilter;
+
+        @Override
+        public Integer call() throws Exception {
+            File file = PathUtil.resolveFile(targetFile);
+            if (!file.exists()) {
+                System.err.println("Error: File not found: " + file.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ReferenceSearchResult result;
+            if (file.isDirectory()) {
+                result = decompiler.findReferencesInDirectory(file, targetQuery, limit);
+            } else {
+                result = decompiler.findReferences(file, targetQuery, limit, pathFilter);
+            }
+
+            System.out.println(result.formattedSummary());
             return 0;
         }
     }

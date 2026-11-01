@@ -6,6 +6,7 @@ import com.joutvhu.javadec.core.loader.PathUtil;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
 import com.joutvhu.javadec.core.model.ExportResult;
+import com.joutvhu.javadec.core.model.ReferenceSearchResult;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -375,6 +376,49 @@ public class JavadecMcpServer {
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("find_references")
+                                .description("Find all callers, usages, or references of a method, field, or class in an archive with line numbers")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive (supports ~ and $HOME)"),
+                                                "target", Map.of("type", "string", "description", "Target to find, e.g. 'com/example/Service#method', '#methodName', or 'com/example/MyClass'"),
+                                                "limit", Map.of("type", "integer", "description", "Optional maximum number of references to return (default: 100)"),
+                                                "pathFilter", Map.of("type", "string", "description", "Optional package or path prefix filter inside archive")
+                                        ),
+                                        "required", List.of("jarPath", "target")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
+                                String target = (String) request.arguments().get("target");
+                                if (target == null || target.isBlank()) {
+                                    throw new IllegalArgumentException("'target' query is required (e.g. 'com/example/MyService#myMethod' or 'com.example.MyClass')");
+                                }
+
+                                Integer limit = request.arguments().get("limit") instanceof Number n ? n.intValue() : 100;
+                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                ReferenceSearchResult result = DECOMPILER.findReferences(jar, target, limit, pathFilter);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
                                         .isError(false)
                                         .build();
                             } catch (Exception e) {

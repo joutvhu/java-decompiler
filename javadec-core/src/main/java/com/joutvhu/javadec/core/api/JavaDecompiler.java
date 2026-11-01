@@ -5,7 +5,9 @@ import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
 import com.joutvhu.javadec.core.model.ExportResult;
+import com.joutvhu.javadec.core.model.ReferenceSearchResult;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
+import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -64,6 +66,24 @@ public class JavaDecompiler {
 
     public String readArchiveResource(File archiveFile, String resourcePath) throws IOException {
         return readArchiveResource(archiveFile, resourcePath, null, null);
+    }
+
+    /**
+     * Scans an archive for references/usages of a class, method, or field.
+     */
+    public ReferenceSearchResult findReferences(File archiveFile, String query, Integer limit, String pathFilter) throws IOException {
+        return BytecodeReferenceScanner.scanArchive(archiveFile, query, limit, pathFilter);
+    }
+
+    public ReferenceSearchResult findReferences(File archiveFile, String query) throws IOException {
+        return findReferences(archiveFile, query, 100, null);
+    }
+
+    /**
+     * Scans a directory of compiled classes for references/usages of a class, method, or field.
+     */
+    public ReferenceSearchResult findReferencesInDirectory(File directory, String query, Integer limit) throws IOException {
+        return BytecodeReferenceScanner.scanDirectory(directory, query, limit);
     }
 
     /**

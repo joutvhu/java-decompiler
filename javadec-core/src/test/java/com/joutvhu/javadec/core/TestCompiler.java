@@ -13,22 +13,31 @@ import java.util.*;
 public class TestCompiler {
 
     public static Map<String, byte[]> compile(String className, String sourceCode) {
+        return compile(Map.of(className, sourceCode));
+    }
+
+    public static Map<String, byte[]> compile(Map<String, String> sources) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
             throw new IllegalStateException("System Java Compiler not found. A JDK runtime is required.");
         }
 
         Map<String, byte[]> outputBytecode = new HashMap<>();
+        List<JavaFileObject> sourceFiles = new ArrayList<>();
 
-        SimpleJavaFileObject sourceFile = new SimpleJavaFileObject(
-                URI.create("string:///" + className.replace('.', '/') + ".java"),
-                JavaFileObject.Kind.SOURCE
-        ) {
-            @Override
-            public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-                return sourceCode;
-            }
-        };
+        for (Map.Entry<String, String> entry : sources.entrySet()) {
+            String className = entry.getKey();
+            String sourceCode = entry.getValue();
+            sourceFiles.add(new SimpleJavaFileObject(
+                    URI.create("string:///" + className.replace('.', '/') + ".java"),
+                    JavaFileObject.Kind.SOURCE
+            ) {
+                @Override
+                public CharSequence getCharContent(boolean ignoreEncodingErrors) {
+                    return sourceCode;
+                }
+            });
+        }
 
         ForwardingJavaFileManager<JavaFileManager> fileManager = new ForwardingJavaFileManager<>(
                 compiler.getStandardFileManager(null, null, null)
@@ -50,10 +59,10 @@ public class TestCompiler {
         };
 
         List<String> options = List.of("-parameters", "-g");
-        JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, options, null, List.of(sourceFile));
+        JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, null, options, null, sourceFiles);
         boolean success = task.call();
         if (!success) {
-            throw new IllegalArgumentException("Compilation failed for " + className + ":\n" + sourceCode);
+            throw new IllegalArgumentException("Compilation failed for sources: " + sources.keySet());
         }
 
         return outputBytecode;
