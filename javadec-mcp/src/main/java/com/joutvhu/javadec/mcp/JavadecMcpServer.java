@@ -26,13 +26,13 @@ public class JavadecMcpServer {
 
     private static final JavaDecompiler DECOMPILER = new JavaDecompiler();
 
-    private static boolean isArchiveFile(String path) {
+    static boolean isArchiveFile(String path) {
         if (path == null) return false;
         String lower = path.toLowerCase();
         return lower.endsWith(".jar") || lower.endsWith(".zip") || lower.endsWith(".war") || lower.endsWith(".ear");
     }
 
-    private static String resolveTarget(Map<String, Object> arguments) {
+    static String resolveTarget(Map<String, Object> arguments) {
         if (arguments.get("target") instanceof String t && !t.isBlank()) {
             return PathUtil.expandUserHome(t);
         }
@@ -42,7 +42,7 @@ public class JavadecMcpServer {
         return null;
     }
 
-    private static void validateTarget(String target) throws IOException {
+    static void validateTarget(String target) throws IOException {
         if (target == null || target.isBlank()) {
             throw new IllegalArgumentException("Either 'target' (e.g. 'library.jar!com/example/MyClass.class') or ('jarPath' and 'classPath') must be specified.");
         }

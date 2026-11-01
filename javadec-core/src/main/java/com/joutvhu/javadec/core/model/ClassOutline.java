@@ -177,7 +177,7 @@ public record ClassOutline(
 
     private static String simpleName(String internalName) {
         if (internalName == null) return "";
-        int lastSlash = internalName.lastIndexOf('/');
-        return lastSlash >= 0 ? internalName.substring(lastSlash + 1) : internalName;
+        int lastSeparator = Math.max(internalName.lastIndexOf('/'), internalName.lastIndexOf('.'));
+        return lastSeparator >= 0 ? internalName.substring(lastSeparator + 1) : internalName;
     }
 }

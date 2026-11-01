@@ -42,16 +42,16 @@ public class PathUtil {
                 return normalizedHome;
             }
             if (p.startsWith("~/") || p.startsWith("~\\")) {
-                return normalizedHome + p.substring(1);
+                return (normalizedHome + "/" + p.substring(2).replace('\\', '/')).replaceAll("/+", "/");
             }
             if (p.startsWith("$HOME/") || p.startsWith("$HOME\\")) {
-                return normalizedHome + p.substring(5);
+                return (normalizedHome + "/" + p.substring(6).replace('\\', '/')).replaceAll("/+", "/");
             }
             if (p.equals("$HOME")) {
                 return normalizedHome;
             }
             if (p.startsWith("%USERPROFILE%/") || p.startsWith("%USERPROFILE%\\")) {
-                return normalizedHome + p.substring(14);
+                return (normalizedHome + "/" + p.substring(14).replace('\\', '/')).replaceAll("/+", "/");
             }
             if (p.equalsIgnoreCase("%USERPROFILE%")) {
                 return normalizedHome;
