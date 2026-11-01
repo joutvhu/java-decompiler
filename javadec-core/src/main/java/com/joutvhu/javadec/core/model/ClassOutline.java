@@ -6,7 +6,7 @@ import java.util.List;
 /**
  * Represents the outline (skeleton/signature) of a Java class/interface/record/enum.
  * Extremely token-efficient, allowing AI agents to understand API structures without full method bodies.
- * Natively renders clean Java syntax for records, enums, annotations, and methods.
+ * Natively renders clean, syntactically valid Java syntax for classes, interfaces, records, and enums.
  */
 public record ClassOutline(
         String className,
@@ -66,8 +66,12 @@ public record ClassOutline(
         }
         sb.append(classKind).append(" ").append(simpleName(className));
 
+        boolean isInterface = "interface".equals(classKind) || "@interface".equals(classKind);
+        boolean isRecord = "record".equals(classKind);
+        boolean isEnum = "enum".equals(classKind);
+
         // Render record components e.g. record User(String name, int age)
-        if ("record".equals(classKind) && recordComponents != null && !recordComponents.isEmpty()) {
+        if (isRecord && recordComponents != null && !recordComponents.isEmpty()) {
             sb.append("(");
             for (int i = 0; i < recordComponents.size(); i++) {
                 RecordComponentOutline rc = recordComponents.get(i);
@@ -79,18 +83,29 @@ public record ClassOutline(
             sb.append(")");
         }
 
-        if (!"record".equals(classKind) && superClassName != null && !superClassName.equals("java/lang/Object") && !superClassName.equals("java/lang/Record") && !superClassName.isEmpty()) {
+        // Extends clause (classes only; records implicitly extend Record, enums implicitly extend Enum)
+        if (!isInterface && !isRecord && !isEnum
+                && superClassName != null
+                && !superClassName.equals("java/lang/Object")
+                && !superClassName.equals("java/lang/Record")
+                && !superClassName.equals("java/lang/Enum")
+                && !superClassName.isEmpty()) {
             sb.append(" extends ").append(simpleName(superClassName));
         }
 
+        // Interfaces (for interfaces use 'extends', for classes/records/enums use 'implements')
         if (interfaces != null && !interfaces.isEmpty()) {
-            sb.append(" implements ").append(String.join(", ", interfaces.stream().map(ClassOutline::simpleName).toList()));
+            if (isInterface) {
+                sb.append(" extends ").append(String.join(", ", interfaces.stream().map(ClassOutline::simpleName).toList()));
+            } else {
+                sb.append(" implements ").append(String.join(", ", interfaces.stream().map(ClassOutline::simpleName).toList()));
+            }
         }
 
         sb.append(" {\n");
 
         // Render enum constants e.g. ACTIVE, INACTIVE;
-        if ("enum".equals(classKind) && enumConstants != null && !enumConstants.isEmpty()) {
+        if (isEnum && enumConstants != null && !enumConstants.isEmpty()) {
             sb.append("    ");
             sb.append(String.join(", ", enumConstants));
             sb.append(";\n\n");

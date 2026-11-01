@@ -49,7 +49,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         cfrOptions.put("showversion", "false");
         if (options != null) {
             if (options.showLineNumbers()) {
-                cfrOptions.put("trackbytecodeloc", "true");
+                cfrOptions.put("forceprintpages", "true");
             }
             if (options.includeSyntheticMembers()) {
                 cfrOptions.put("removeinnerclasssynthetics", "false");
