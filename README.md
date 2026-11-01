@@ -1,4 +1,4 @@
-# javadec
+# Java Decompiler (javadec)
 
 <p align="center">
   <strong>Universal &amp; Token-Efficient Java Bytecode, Resource, and Archive Inspector for AI &amp; Developers</strong>
@@ -343,6 +343,12 @@ node bin/javadec.js --help
 
 # Test MCP Server locally
 node bin/javadec.js mcp
+
+# Bump version across package.json, POMs, and Java classes
+npm run bump:patch       # 1.0.0 -> 1.0.1
+npm run bump:minor       # 1.0.0 -> 1.1.0
+npm run bump:major       # 1.0.0 -> 2.0.0
+npm run bump:prerelease  # 1.0.0 -> 1.0.1-0
 ```
 
 ---

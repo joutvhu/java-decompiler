@@ -29,20 +29,37 @@ function bumpSemver(current, type) {
     if (!parsed) {
         throw new Error(`Cannot parse current version "${current}" as semver.`);
     }
-    let { major, minor, patch } = parsed;
+    let { major, minor, patch, prerelease } = parsed;
     if (type === 'major') {
         major += 1;
         minor = 0;
         patch = 0;
+        prerelease = '';
     } else if (type === 'minor') {
         minor += 1;
         patch = 0;
+        prerelease = '';
     } else if (type === 'patch') {
         patch += 1;
+        prerelease = '';
+    } else if (type === 'prerelease') {
+        if (!prerelease) {
+            patch += 1;
+            prerelease = '0';
+        } else {
+            const preMatch = prerelease.match(/^(.*?)(?:[.-]?(\d+))?$/);
+            if (preMatch && preMatch[2] !== undefined) {
+                const prefix = preMatch[1] ? preMatch[1] + '.' : '';
+                const num = parseInt(preMatch[2], 10) + 1;
+                prerelease = `${prefix}${num}`;
+            } else {
+                prerelease = `${prerelease}.1`;
+            }
+        }
     } else {
-        throw new Error(`Unknown bump type "${type}". Use major, minor, or patch.`);
+        throw new Error(`Unknown bump type "${type}". Use major, minor, patch, or prerelease.`);
     }
-    return `${major}.${minor}.${patch}`;
+    return prerelease ? `${major}.${minor}.${patch}-${prerelease}` : `${major}.${minor}.${patch}`;
 }
 
 function updateRootPom(filePath, newVersion) {
@@ -76,22 +93,26 @@ function updateJavaFile(filePath, regex, replacement) {
 function main() {
     const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const currentVersion = pkg.version;
-    const arg = process.argv[2];
+    const rawArg = process.argv[2];
+    const isNpmVersionHook = process.env.npm_lifecycle_event === 'version';
 
     let targetVersion = '';
 
-    if (!arg) {
+    if (isNpmVersionHook && !rawArg) {
         // Called during npm version lifecycle hook: package.json has already been updated by npm
         targetVersion = process.env.npm_package_version || pkg.version;
-    } else if (['major', 'minor', 'patch'].includes(arg.toLowerCase())) {
-        targetVersion = bumpSemver(currentVersion, arg.toLowerCase());
-        pkg.version = targetVersion;
-        fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
     } else {
-        // Explicit version provided (e.g. 1.0.1 or 1.0.1-SNAPSHOT)
-        targetVersion = arg.replace(/^v/, '');
-        pkg.version = targetVersion;
-        fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+        const arg = (rawArg || 'patch').toLowerCase();
+        if (['major', 'minor', 'patch', 'prerelease'].includes(arg)) {
+            targetVersion = bumpSemver(currentVersion, arg);
+            pkg.version = targetVersion;
+            fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+        } else {
+            // Explicit version provided (e.g. 1.0.1 or 1.0.1-SNAPSHOT or v1.0.1)
+            targetVersion = rawArg.replace(/^v/, '');
+            pkg.version = targetVersion;
+            fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8');
+        }
     }
 
     console.log(`\n=== [Syncing Project Versions to ${targetVersion}] ===`);
@@ -104,7 +125,7 @@ function main() {
     // 2. Update submodule pom.xml files
     for (const pom of submodulePoms) {
         updateSubmodulePom(pom, targetVersion);
-        const relPath = path.relative(rootDir, pom);
+        const relPath = path.relative(rootDir, pom).replace(/\\/g, '/');
         console.log(`- Updated ${relPath}`);
     }
 
@@ -118,11 +139,11 @@ function main() {
         const filesToStage = [
             'package.json',
             'pom.xml',
-            ...submodulePoms.map(p => path.relative(rootDir, p)),
-            path.relative(rootDir, cliJavaPath),
-            path.relative(rootDir, mcpJavaPath)
+            ...submodulePoms.map(p => path.relative(rootDir, p).replace(/\\/g, '/')),
+            path.relative(rootDir, cliJavaPath).replace(/\\/g, '/'),
+            path.relative(rootDir, mcpJavaPath).replace(/\\/g, '/')
         ];
-        execSync(`git add ${filesToStage.join(' ')}`, { cwd: rootDir, stdio: 'ignore' });
+        execSync(`git add ${filesToStage.map(f => `"${f}"`).join(' ')}`, { cwd: rootDir, stdio: 'ignore' });
         console.log(`- Staged version changes in git`);
     } catch (e) {}
 
