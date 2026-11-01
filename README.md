@@ -1,62 +1,247 @@
 # javadec
 
-> **Universal & Token-Efficient Java Decompiler and Bytecode Inspector for AI & Developers**
+<p align="center">
+  <strong>Universal &amp; Token-Efficient Java Bytecode, Resource, and Archive Inspector for AI &amp; Developers</strong>
+</p>
 
-`javadec` is a modern Java Bytecode, Resource, and Archive inspector designed specifically for **AI Coding Agents** (Kiro, Claude, Cursor) and human developers. It features automatic Companion Sources JAR resolution (`-sources.jar`) to preserve original Javadoc and comments, progressive hierarchical inspection, token-efficient skeletons (class outlining), zero-temp-file resource reading, customizable tree exploration (path & depth limits), line-based pagination (offset & limit), full/selective method decompilation, and full archive export into `.java` files on disk.
-
----
-
-## 🚀 Key Capabilities for AI & Developers
-
-- **💡 Sources-Aware Inspection (Javadoc Preservation)**: Automatically detects companion `<library>-sources.jar` in Maven/Gradle local repositories to serve the author's original `.java` source code with 100% of Javadocs and inline comments intact. Seamlessly falls back to native decompilation when sources are absent.
-- **🌳 Scoped Tree Hierarchy (`tree --path --depth`)**: Zoom in on specific packages/folders with configurable depth limit to prevent context bloating.
-- **📄 Paginated Resource Reading (`resource --offset --limit`)**: Read `.properties`, `.yml`, `.xml`, `MANIFEST.MF`, `.sql`, etc., in chunks directly from memory.
-- **⚡ Token-Efficient Skeleton Outlines (`outline`)**: Extract signatures, annotations, and fields, saving ~90% context tokens compared to dumping full source code.
-- **🎯 Selective Method Decompilation (`view -m`)**: Decompile only the specific method you need to inspect (including all overloads, annotations, and Javadoc).
-- **📖 Chunked/Paginated Class View (`view --offset --limit`)**: Read massive classes line-by-line without hitting LLM context limits.
-- **💾 Full Archive Source Export (`dump` / `export`)**: Decompile entire archives or specific packages into `.java` files on disk, copying resources while maintaining package structures.
-- **📦 On-Demand Archive Decompilation (`view`)**: Decompile classes directly via archive URI (`library.jar!pkg/Class.class`) with automated inner class resolution.
-- **📂 Raw Archive Extraction (`extract`)**: Extract raw archive files (bytecode/resources) to disk.
-- **🤖 Built-in MCP Server (`javadec mcp`)**: Powered by the official Model Context Protocol Java SDK (`io.modelcontextprotocol.sdk`) for standard stdio integration.
+<p align="center">
+  <a href="https://www.npmjs.com/package/javadec"><img src="https://img.shields.io/npm/v/javadec.svg?style=flat-square" alt="npm version" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square" alt="License" /></a>
+  <a href="https://openjdk.org/"><img src="https://img.shields.io/badge/Java-21%2B-orange.svg?style=flat-square" alt="Java 21+" /></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node.js-%3E%3D16-green.svg?style=flat-square" alt="Node.js >= 16" /></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-Compatible-purple.svg?style=flat-square" alt="MCP Compatible" /></a>
+</p>
 
 ---
 
-## 📦 Quick Start via CLI (`npx`)
+## 💡 Why javadec?
 
-Requires Java runtime (JDK 21+):
+Traditional Java decompilers (like JD-GUI, standalone Fernflower, or CLI CFR) are built for manual human inspection: they dump entire archives to disk, emit thousands of lines of code into a single window, and lose author documentation.
 
-```bash
-# 1. View class or method with original Javadoc (auto-resolves -sources.jar if present)
-npx javadec view ~/.m2/repository/org/example/demo/1.0/demo-1.0.jar!com/example/Demo.class -m process
+When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Workspace) or modern CLI workflows, traditional approaches hit three fatal bottlenecks:
+1. **Context Window Exhaustion**: Dumping an entire class (or JAR) burns 5,000–30,000 context tokens in a single prompt.
+2. **Lost Javadocs & Comments**: Bytecode (`.class`) does not retain comments or Javadoc. Decompilers output bare code stripped of documentation.
+3. **Disk Clutter & Incompatible Archives**: Unpacking entire JARs generates temporary file clutter on disk, and traditional tools fail on Spring Boot executable JARs (`BOOT-INF/classes`) or WAR files (`WEB-INF/classes`).
 
-# 2. View scoped tree hierarchy (e.g. only META-INF up to 2 levels deep)
-npx javadec tree my-library.jar --path META-INF --depth 2
+**`javadec` solves all of these problems with a progressive, token-first inspection hierarchy:**
 
-# 3. Read configuration files with line pagination (lines 1 to 50)
-npx javadec resource my-library.jar application.yml --offset 1 --limit 50
-
-# 4. Find classes inside an archive (supports both package and path format)
-npx javadec list my-library.jar -p com.example.service
-
-# 5. Extract class outline / skeleton (save ~90% context tokens)
-npx javadec outline my-library.jar!com/example/UserService.class
-
-# 6. Decompile full class with pagination (lines 101 to 200)
-npx javadec view my-library.jar!com/example/UserService.class --offset 101 --limit 100
-
-# 7. Decompile & Export entire JAR to .java source files on disk
-npx javadec dump my-library.jar -o ./src/decompiled -p com/example/service
-
-# 8. Extract raw archive files as-is
-npx javadec extract my-library.jar -o ./raw-output -p META-INF/
+```
+[Target Archive / Class]
+       │
+       ├──► 1. Scoped Archive Tree:    javadec tree [--path <dir>] [--depth <d>]
+       │       High-level summary of packages, class counts, and key configs
+       │
+       ├──► 2. Read Resource (Paged):  javadec resource [--offset <o>] [--limit <l>]
+       │       Read MANIFEST.MF, application.yml, spring.factories directly from memory
+       │
+       ├──► 3. Class Outline:          javadec outline
+       │       Lightweight skeleton (signatures, fields, annotations) — ~90% token savings
+       │
+       ├──► 4. Method View:            javadec view -m <method> [--offset <o>] [--limit <l>]
+       │       Decompile only the target method (with Javadoc if sources jar exists)
+       │
+       ├──► 5. Full Decompile (Paged): javadec view [--offset <o>] [--limit <l>]
+       │       Auto-resolves companion -sources.jar for Javadoc, or falls back to native decompiler
+       │
+       └──► 6. Export to Disk:         javadec dump -o <outputDir> [-p <filter>]
+               Decompile entire archive or package into clean .java files on disk
 ```
 
 ---
 
-## 🤖 Model Context Protocol (MCP) Integration
+## ✨ Key Features
 
-Configure `javadec` in your MCP client settings (e.g. `~/.kiro/settings/mcp.json` or Claude Desktop):
+- **📖 Sources-Aware Inspection (Javadoc Preservation)**: Automatically locates companion `<artifact>-<version>-sources.jar` in Maven local repository (`~/.m2/repository`) or Gradle cache (`~/.gradle/caches`). When present, it serves original author source code with **100% of Javadocs and inline comments intact**!
+- **⚡ Token-Efficient Skeletons via ASM (`outline`)**: Extracts full class signatures, fields, annotations, constructors, and parameter names in ~100–300 tokens without decompiling method bodies.
+- **🎯 Precision Method Decompilation (`view -m`)**: Decompiles only the targeted method (handling all overloads, constructor initializers, abstract/interface methods, and preceding annotations).
+- **📑 Line-Based Pagination (`--offset` & `--limit`)**: Read massive classes or resources in bite-sized chunks to prevent prompt context bloat.
+- **🌳 Scoped Tree Hierarchy (`tree --path --depth`)**: Zoom in on specific packages or sub-directories with configurable depth limit.
+- **🍃 Spring Boot & WAR Native**: Transparently resolves classes and resources inside `BOOT-INF/classes/` and `WEB-INF/classes/`.
+- **💾 Full Archive Source Export (`dump` / `export`)**: Decompiles entire JARs into browsable `.java` source files on disk, copying resources while maintaining package structures.
+- **🤖 Built-in MCP Server (`javadec mcp`)**: Powered by the official Model Context Protocol Java SDK (`io.modelcontextprotocol.sdk`) over stdio.
+- **🔒 Zero-Temp-File & Zip-Slip Protected**: All on-demand inspections happen purely in-memory; disk export is strictly sanitized against path traversal vulnerabilities.
 
+---
+
+## 🛠️ Prerequisites & Installation
+
+### Prerequisites
+- **Node.js**: Version 16.0.0 or higher.
+- **Java Runtime**: JDK 21 or higher.
+
+*Note on Java Detection: `javadec` automatically checks `JAVADEC_JAVA_PATH`, `JAVADEC_JAVA_HOME`, `JAVA_HOME`, and system `PATH`. If your system default Java is older (e.g. Java 8), simply set `JAVADEC_JAVA_HOME` pointing to JDK 21+.*
+
+### Installation Options
+
+#### Option 1: Run instantly via `npx` (No installation needed)
+```bash
+npx javadec --help
+```
+
+#### Option 2: Install globally via npm
+```bash
+npm install -g javadec
+javadec --help
+```
+
+---
+
+## 💻 CLI Command Reference & Examples
+
+### 1. Inspect Archive Tree (`tree`)
+Visualizes the archive hierarchy, class counts, and configuration files with customizable depth and path filters:
+
+```bash
+# Overview of the entire archive (default depth: 3)
+javadec tree library.jar
+
+# Scope to a specific sub-directory with depth 2
+javadec tree library.jar --path META-INF --depth 2
+javadec tree app.jar -p org/springframework -d 3
+```
+
+*Output Example:*
+```
+library.jar!META-INF (2.2 MB, 0 classes, 4 resources, depth=2)
+├── intellij.java.decompiler.kotlin_module (119 B)
+├── plugin.xml (2.5 KB)
+├── pluginIcon.svg (2.1 KB)
+└── pluginIcon_dark.svg (2.1 KB)
+```
+
+---
+
+### 2. Read Configuration & Resource Files (`resource`)
+Reads text content of non-class configuration files (`application.yml`, `.properties`, `.xml`, `MANIFEST.MF`, `.sql`, etc.) directly from archive memory:
+
+```bash
+# Read entire manifest
+javadec resource library.jar META-INF/MANIFEST.MF
+
+# Read Spring Boot configuration with line pagination (lines 1 to 50)
+javadec resource app.jar application.yml --offset 1 --limit 50
+```
+
+---
+
+### 3. List Classes in Archive (`list`)
+Searches class entries inside the archive using substring or package matching:
+
+```bash
+# List all classes
+javadec list library.jar
+
+# Search by package or class name (supports both dot and slash notation)
+javadec list library.jar -p com.example.service
+javadec list library.jar -p Security
+```
+
+---
+
+### 4. Extract Class Outline / Skeleton (`outline`)
+Extracts class signatures, interfaces, fields, annotations, and authentic parameter names without method bodies (~90% token savings):
+
+```bash
+# Using URI syntax
+javadec outline library.jar!com/example/service/OrderService.class
+
+# Using space-separated arguments
+javadec outline library.jar com/example/service/OrderService.class
+
+# Standalone .class file on disk
+javadec outline target/classes/com/example/util/StringUtils.class
+```
+
+*Output Example:*
+```java
+package com.example.service;
+
+@Service
+@Transactional
+public class OrderService implements IOrderService {
+    // Fields
+    @Autowired
+    private OrderRepository orderRepository;
+
+    // Methods
+    public OrderService(OrderRepository orderRepository);
+    public Order createOrder(String customerId, List<Item> items) throws OrderException;
+    public boolean cancelOrder(String orderId);
+}
+```
+
+---
+
+### 5. Decompile Class or Single Method (`view`)
+Decompiles full class source code or selectively targets a single method. If a companion `-sources.jar` exists alongside the binary JAR, original Javadocs and comments are automatically preserved:
+
+```bash
+# Decompile only a specific method (includes all overloads, annotations & Javadoc)
+javadec view library.jar!com/example/service/OrderService.class -m createOrder
+
+# Decompile full class
+javadec view library.jar!com/example/service/OrderService.class
+
+# Read large decompiled class in chunks (lines 101 to 200)
+javadec view library.jar!com/example/service/OrderService.class --offset 101 --limit 100
+
+# Include bytecode line number comments
+javadec view library.jar!com/example/service/OrderService.class --lines
+```
+
+---
+
+### 6. Decompile & Export Entire Archive (`dump` / `export`)
+Decompiles all classes (or a filtered package) into `.java` source files on disk, copying resources while maintaining package structures:
+
+```bash
+# Decompile entire JAR into a directory
+javadec dump library.jar -o ./decompiled-src
+
+# Decompile only classes matching a package filter
+javadec dump library.jar -o ./decompiled-src -p com/example/service
+
+# Include line number comments in exported files
+javadec dump library.jar -o ./decompiled-src --lines
+```
+
+---
+
+### 7. Extract Raw Archive Files (`extract`)
+Unpacks raw archive entries (bytecode `.class` and resources) directly to disk:
+
+```bash
+# Extract all files
+javadec extract library.jar -o ./raw-extracted
+
+# Extract only META-INF resources
+javadec extract library.jar -o ./raw-extracted -p META-INF/
+```
+
+---
+
+## 🤖 Model Context Protocol (MCP) Server
+
+`javadec` includes a native Model Context Protocol (MCP) server powered by the official Java SDK (`io.modelcontextprotocol.sdk`) communicating over stdio JSON-RPC.
+
+### Client Configuration
+
+Add `javadec` to your MCP client configuration:
+
+#### Kiro IDE (`~/.kiro/settings/mcp.json` or `<workspace>/.kiro/settings/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "javadec": {
+      "command": "npx",
+      "args": ["-y", "javadec", "mcp"],
+      "disabled": false
+    }
+  }
+}
+```
+
+#### Claude Desktop (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -68,17 +253,100 @@ Configure `javadec` in your MCP client settings (e.g. `~/.kiro/settings/mcp.json
 }
 ```
 
-### Available MCP Tools:
-- `inspect_archive_tree(jarPath, path?, depth?)`: Get archive hierarchy tree with custom sub-path and depth limit.
-- `read_jar_resource(jarPath, resourcePath, lineOffset?, lineLimit?)`: Read configuration files with line pagination.
-- `list_jar_classes(jarPath, pattern?)`: Search class names and packages in archive.
-- `get_class_outline(target)`: Extract class signatures/skeleton (saving ~90% tokens).
-- `decompile_class(target, lineOffset?, lineLimit?)`: Decompile full class source code (auto-resolves `-sources.jar` for Javadoc).
-- `decompile_method(target, methodName, lineOffset?, lineLimit?)`: Decompile single method (with Javadoc if available).
-- `export_archive(jarPath, outputDir, pathFilter?)`: Decompile entire archive (or package) into `.java` source files on disk.
-- `extract_archive(jarPath, outputDir, pathFilter?)`: Extract raw archive files to disk.
+#### Custom JDK Configuration:
+If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `env` block:
+```json
+{
+  "mcpServers": {
+    "javadec": {
+      "command": "npx",
+      "args": ["-y", "javadec", "mcp"],
+      "env": {
+        "JAVADEC_JAVA_HOME": "C:\\Program Files\\Java\\jdk-21"
+      }
+    }
+  }
+}
+```
+
+---
+
+### MCP Tool Catalog
+
+| Tool Name | Parameters | Description |
+| :--- | :--- | :--- |
+| **`inspect_archive_tree`** | `jarPath` (req), `path` (opt), `depth` (opt) | Returns a compact tree structure with total class/resource counts. |
+| **`read_jar_resource`** | `jarPath` (req), `resourcePath` (req), `lineOffset` (opt), `lineLimit` (opt) | Reads non-class text resources (`.yml`, `.properties`, `.xml`, `MANIFEST.MF`) with pagination. |
+| **`list_jar_classes`** | `jarPath` (req), `pattern` (opt) | Lists classes matching a package or substring pattern. |
+| **`get_class_outline`** | `target` (req), or (`jarPath` + `classPath`) | Extracts class skeleton/signatures without method bodies (~90% token savings). |
+| **`decompile_class`** | `target` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc). |
+| **`decompile_method`** | `target` (req), `methodName` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
+| **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Decompiles entire archive or package into `.java` files on disk. |
+| **`extract_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Extracts raw archive files (bytecode and resources) to disk as-is. |
+
+---
+
+## 🎯 Recommended AI Agent Workflow
+
+When integrating `javadec` with AI assistants (via MCP or CLI), follow this optimal token-conserving procedure:
+
+### Scenario: Investigating an Exception in a Third-Party Library
+1. **Locate JAR in Dependency Cache**:
+   Find the library in `~/.m2/repository` or `~/.gradle/caches`.
+2. **Inspect Outline First**:
+   Call `get_class_outline("lib.jar!com/example/AuthManager.class")` to verify class fields, constructors, and method signatures (~200 tokens).
+3. **Decompile the Faulty Method**:
+   Call `decompile_method("lib.jar!com/example/AuthManager.class", "authenticate")` to read the exact logic and Javadoc of the method from the stack trace (~300 tokens).
+4. **Check Configuration (If needed)**:
+   Call `read_jar_resource("lib.jar", "META-INF/spring.factories")` to see how components are auto-configured.
+
+Total tokens consumed: **~700 tokens** (compared to **15,000+ tokens** if dumping entire files).
+
+---
+
+## 🏗️ Architecture & Building from Source
+
+`javadec` is structured as a Maven multi-module project packaged with a Node.js npm CLI wrapper:
+
+```
+java-decompiler/
+├── pom.xml                               # Parent Maven POM
+├── package.json                          # NPM Package configuration
+├── bin/
+│   └── javadec.js                        # Node.js launcher (dispatches to CLI or MCP jar)
+├── jars/
+│   ├── javadec-cli.jar                   # Shaded fat-jar for CLI
+│   └── javadec-mcp.jar                   # Shaded fat-jar for MCP Server
+├── javadec-core/                         # Core library
+│   ├── com.joutvhu.javadec.core.*        # Loader, Outline, Model, Decompiler Facade
+│   └── com.joutvhu.javadec.engine.*      # Native Decompiler Engine (Java 8 - 21+)
+├── javadec-cli/                          # Command Line Interface (Picocli)
+├── javadec-mcp/                          # Model Context Protocol Server (MCP Java SDK)
+├── scripts/
+│   ├── build.js                          # Build automation script
+│   └── bump-version.js                   # Semver bump utility
+└── skills/
+    └── javadec/SKILL.md                  # Comprehensive AI Agent guidance skill
+```
+
+### Build Commands
+
+```bash
+# Build all modules and package JARs into jars/
+npm run build
+
+# Run unit tests
+mvn test
+
+# Test CLI locally
+node bin/javadec.js --help
+
+# Test MCP Server locally
+node bin/javadec.js mcp
+```
 
 ---
 
 ## 📄 License
-Apache-2.0
+
+Licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for details.
