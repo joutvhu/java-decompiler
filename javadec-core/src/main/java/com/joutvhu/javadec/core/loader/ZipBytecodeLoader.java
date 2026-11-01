@@ -14,6 +14,7 @@ import java.util.zip.ZipFile;
  * High-performance reader and extractor for JAR/ZIP archives and in-memory bytecode/resources.
  * Natively supports standard JARs, Spring Boot executable fat JARs (BOOT-INF/classes), WARs (WEB-INF/classes),
  * and Companion Sources JARs (-sources.jar) for reading original Javadoc and comments.
+ * Automatically resolves inner classes written with dot notation (e.g. Outer.Inner -> Outer$Inner).
  */
 public class ZipBytecodeLoader {
 
@@ -27,8 +28,10 @@ public class ZipBytecodeLoader {
 
     public static List<String> listClasses(File archiveFile, String filterPattern) throws IOException {
         List<String> classes = new ArrayList<>();
-        String slashFilter = filterPattern != null ? filterPattern.trim().replace('\\', '/').replace('.', '/') : null;
-        String dotFilter = filterPattern != null ? filterPattern.trim().replace('\\', '.').replace('/', '.') : null;
+
+        String cleanFilter = filterPattern != null ? filterPattern.trim().replaceAll("^\\*+", "").replaceAll("\\*+$", "") : null;
+        String slashFilter = cleanFilter != null ? cleanFilter.replace('\\', '/').replace('.', '/') : null;
+        String dotFilter = cleanFilter != null ? cleanFilter.replace('\\', '.').replace('/', '.') : null;
 
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -45,7 +48,7 @@ public class ZipBytecodeLoader {
                     }
 
                     String className = cleanName.substring(0, cleanName.length() - 6);
-                    if (filterPattern == null || filterPattern.isEmpty()) {
+                    if (cleanFilter == null || cleanFilter.isEmpty()) {
                         classes.add(className);
                     } else {
                         String dottedName = className.replace('/', '.');
@@ -78,33 +81,57 @@ public class ZipBytecodeLoader {
         String normalizedPath = cleanPath.replace('.', '/') + ".class";
 
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
-            // 1. Direct and prefix lookups (standard, Spring Boot BOOT-INF, WAR WEB-INF)
-            for (String prefix : ARCHIVE_CLASS_PREFIXES) {
-                String fullPath = prefix + normalizedPath;
-                ZipEntry entry = zipFile.getEntry(fullPath);
-                if (entry != null) {
-                    try (InputStream is = zipFile.getInputStream(entry)) {
-                        return is.readAllBytes();
-                    }
-                }
-            }
-
-            // 2. Case-insensitive fallback
-            Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry e = entries.nextElement();
-                String name = e.getName();
-                for (String prefix : ARCHIVE_CLASS_PREFIXES) {
-                    if (name.equalsIgnoreCase(prefix + normalizedPath)) {
-                        try (InputStream is = zipFile.getInputStream(e)) {
-                            return is.readAllBytes();
-                        }
-                    }
+            ZipEntry entry = findClassZipEntry(zipFile, normalizedPath);
+            if (entry != null) {
+                try (InputStream is = zipFile.getInputStream(entry)) {
+                    return is.readAllBytes();
                 }
             }
 
             throw new IOException("Class not found: " + classPath + " in archive: " + archiveFile.getAbsolutePath());
         }
+    }
+
+    /**
+     * Resolves a class entry in a ZIP file, supporting:
+     * 1. Standard package path (org/example/MyClass.class)
+     * 2. Spring Boot / WAR prefixes (BOOT-INF/classes/, WEB-INF/classes/)
+     * 3. Inner-class dot-to-dollar resolution (e.g. Outer/Inner.class -> Outer$Inner.class)
+     * 4. Case-insensitive lookup as fallback
+     */
+    private static ZipEntry findClassZipEntry(ZipFile zipFile, String normalizedPath) {
+        // 1. Direct and prefix lookups
+        for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+            String fullPath = prefix + normalizedPath;
+            ZipEntry entry = zipFile.getEntry(fullPath);
+            if (entry != null) return entry;
+        }
+
+        // 2. Inner-class resolution: replace trailing '/' with '$' for inner classes written with dot notation
+        String candidate = normalizedPath;
+        int slashIdx;
+        while ((slashIdx = candidate.lastIndexOf('/')) > 0) {
+            candidate = candidate.substring(0, slashIdx) + "$" + candidate.substring(slashIdx + 1);
+            for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                String fullPath = prefix + candidate;
+                ZipEntry entry = zipFile.getEntry(fullPath);
+                if (entry != null) return entry;
+            }
+        }
+
+        // 3. Case-insensitive fallback
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry e = entries.nextElement();
+            String name = e.getName();
+            for (String prefix : ARCHIVE_CLASS_PREFIXES) {
+                if (name.equalsIgnoreCase(prefix + normalizedPath) || name.equalsIgnoreCase(prefix + candidate)) {
+                    return e;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -192,6 +219,18 @@ public class ZipBytecodeLoader {
 
         try (ZipFile zip = new ZipFile(sourcesJar)) {
             ZipEntry entry = zip.getEntry(javaEntryPath);
+
+            // If not found, try stripping sub-class names in case inner class was passed with dots (e.g. Outer.Inner)
+            if (entry == null) {
+                String candidate = javaEntryPath;
+                int dotJavaSlash;
+                while ((dotJavaSlash = candidate.lastIndexOf('/', candidate.length() - 6)) > 0) {
+                    candidate = candidate.substring(0, dotJavaSlash) + ".java";
+                    entry = zip.getEntry(candidate);
+                    if (entry != null) break;
+                }
+            }
+
             if (entry == null) {
                 // Case-insensitive lookup
                 Enumeration<? extends ZipEntry> entries = zip.entries();

@@ -2,6 +2,7 @@ package com.joutvhu.javadec.core;
 
 import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
+import com.joutvhu.javadec.core.loader.PathUtil;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.ArchiveTree;
 import com.joutvhu.javadec.core.model.ClassOutline;
@@ -37,8 +38,8 @@ public class JavaDecompilerTest {
         assertNotNull(pluginXml);
         assertEquals(5, pluginXml.split("\r?\n").length, "Should read exactly 5 lines");
 
-        // 3. Test listArchiveClasses
-        List<String> classes = decompiler.listArchiveClasses(jarFile, "ConsoleDecompiler");
+        // 3. Test listArchiveClasses with glob / package pattern
+        List<String> classes = decompiler.listArchiveClasses(jarFile, "*ConsoleDecompiler*");
         assertFalse(classes.isEmpty(), "ConsoleDecompiler class must be found");
         String targetClass = classes.get(0);
 
@@ -49,25 +50,32 @@ public class JavaDecompilerTest {
         String skeleton = outline.toSkeletonSource();
         assertTrue(skeleton.contains("ConsoleDecompiler"));
 
-        // 5. Test decompileArchiveClass with line pagination (lines 10 to 15)
+        // 5. Test inner class resolution with dot notation (e.g. ClassWriter.MType instead of $)
+        byte[] innerBytes = ZipBytecodeLoader.loadClassBytes(jarFile, "org/jetbrains/java/decompiler/main/ClassWriter.MType.class");
+        assertNotNull(innerBytes, "Must resolve inner class with dot notation");
+        ClassOutline innerOutline = decompiler.getOutline(innerBytes);
+        assertNotNull(innerOutline);
+        assertTrue(innerOutline.className().contains("ClassWriter$MType"));
+
+        // 6. Test decompileArchiveClass with line pagination (lines 10 to 15)
         DecompileOptions pagedOptions = DecompileOptions.builder().lineOffset(10).lineLimit(6).build();
         String source = decompiler.decompileArchiveClass(jarFile, targetClass, pagedOptions);
         assertNotNull(source);
         assertEquals(6, source.split("\r?\n").length, "Decompiled source should have 6 paginated lines");
 
-        // 6. Test decompileArchiveMethod
+        // 7. Test decompileArchiveMethod
         String methodSource = decompiler.decompileArchiveMethod(jarFile, targetClass, "main", DecompileOptions.defaults());
         assertNotNull(methodSource);
         assertTrue(methodSource.contains("main"));
 
-        // 7. Test extractArchive (raw extraction)
+        // 8. Test extractArchive (raw extraction)
         File rawExtractDir = tempDir.resolve("raw").toFile();
         int extracted = decompiler.extractArchive(jarFile, rawExtractDir, "ConsoleDecompiler");
         assertTrue(extracted > 0, "Must extract ConsoleDecompiler");
         File extractedClassFile = new File(rawExtractDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.class");
         assertTrue(extractedClassFile.exists(), "Extracted .class file must exist on disk");
 
-        // 8. Test standalone file methods (getClassOutline, decompileFile, decompileFileMethod)
+        // 9. Test standalone file methods (getClassOutline, decompileFile, decompileFileMethod)
         ClassOutline standaloneOutline = decompiler.getClassOutline(extractedClassFile);
         assertNotNull(standaloneOutline);
         assertEquals("ConsoleDecompiler", standaloneOutline.className().substring(standaloneOutline.className().lastIndexOf('/') + 1));
@@ -80,7 +88,7 @@ public class JavaDecompilerTest {
         assertNotNull(standaloneMethod);
         assertTrue(standaloneMethod.contains("main"));
 
-        // 9. Test exportArchive (full decompilation to .java files)
+        // 10. Test exportArchive (full decompilation to .java files)
         File decompiledDir = tempDir.resolve("decompiled").toFile();
         ExportResult exportResult = decompiler.exportArchive(jarFile, decompiledDir, "ConsoleDecompiler", DecompileOptions.defaults());
         assertNotNull(exportResult);
@@ -88,7 +96,7 @@ public class JavaDecompilerTest {
         File expectedJavaFile = new File(decompiledDir, "org/jetbrains/java/decompiler/main/decompiler/ConsoleDecompiler.java");
         assertTrue(expectedJavaFile.exists(), "Decompiled .java file must exist on disk at " + expectedJavaFile.getAbsolutePath());
 
-        // 10. Test Companion Sources JAR resolution (preserves Javadoc and comments)
+        // 11. Test Companion Sources JAR resolution (preserves Javadoc and comments)
         File mockBinJar = tempDir.resolve("demo-lib-1.0.jar").toFile();
         File mockSrcJar = tempDir.resolve("demo-lib-1.0-sources.jar").toFile();
 
@@ -132,5 +140,10 @@ public class JavaDecompilerTest {
         assertTrue(resolvedSource.contains("Service handling core order management operations"), "Must contain class Javadoc");
         assertTrue(resolvedSource.contains("Processes the given order"), "Must contain method Javadoc");
         assertTrue(resolvedSource.contains("// Business verification logic"), "Must contain inline comments");
+
+        // 12. Test PathUtil ~ and $HOME expansion
+        String userHome = System.getProperty("user.home").replace('\\', '/');
+        assertEquals(userHome + "/.m2/repository", PathUtil.expandUserHome("~/.m2/repository"));
+        assertEquals(userHome + "/.m2/repository", PathUtil.expandUserHome("$HOME/.m2/repository"));
     }
 }
