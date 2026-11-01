@@ -177,6 +177,9 @@ public class JavaDecompiler {
      * Extracts a ClassOutline from a standalone .class file.
      */
     public ClassOutline getClassOutline(File classFile) throws IOException {
+        if (classFile.getName().endsWith(".java")) {
+            throw new IllegalArgumentException("'" + classFile.getName() + "' is a Java source file, not a compiled .class file. Use 'javadec view' to view source files.");
+        }
         byte[] bytes = Files.readAllBytes(classFile.toPath());
         return getOutline(bytes);
     }
@@ -218,11 +221,16 @@ public class JavaDecompiler {
     }
 
     /**
-     * Decompiles a standalone .class file with local folder context for inner class resolution.
+     * Decompiles a standalone .class file (or reads .java file directly) with local folder context for inner class resolution.
      */
     public String decompileFile(File classFile, DecompileOptions options) throws IOException {
-        byte[] bytes = Files.readAllBytes(classFile.toPath());
         DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        if (classFile.getName().endsWith(".java") && classFile.exists()) {
+            String src = Files.readString(classFile.toPath(), StandardCharsets.UTF_8);
+            return ZipBytecodeLoader.paginateLines(src, opts.lineOffset(), opts.lineLimit());
+        }
+
+        byte[] bytes = Files.readAllBytes(classFile.toPath());
         String fullSource;
         if (defaultEngine instanceof CfrDecompilerEngine cfrEngine) {
             fullSource = cfrEngine.decompileWithContext(classFile.getName(), bytes, null, classFile.getParentFile(), opts);
@@ -243,6 +251,17 @@ public class JavaDecompiler {
     }
 
     /**
+     * Decompiles and extracts only the specified method from a standalone file on disk,
+     * maintaining local folder context for inner class resolution.
+     */
+    public String decompileFileMethod(File classFile, String methodName, DecompileOptions options) throws IOException {
+        String fullSource = decompileFile(classFile, options);
+        String extracted = extractMethodFromSource(fullSource, methodName);
+        DecompileOptions opts = options != null ? options : DecompileOptions.defaults();
+        return ZipBytecodeLoader.paginateLines(extracted, opts.lineOffset(), opts.lineLimit());
+    }
+
+    /**
      * Decompiles and extracts only the specified method from an archive class,
      * preserving original Javadoc and comments if a companion `-sources.jar` is present.
      */
@@ -255,15 +274,24 @@ public class JavaDecompiler {
 
     /**
      * Extracts method declaration(s), preceding annotations, and bodies from decompiled Java source text.
-     * Supports overloaded methods, constructors, interface/abstract methods, same-line annotations, and CRLF line endings.
+     * Supports overloaded methods, constructors, interface/abstract methods, static initializers, same-line annotations, and CRLF line endings.
      */
     public String extractMethodFromSource(String fullSource, String methodName) {
-        boolean hasParamHint = methodName.contains("(") && methodName.contains(")");
-        String rawMethod = hasParamHint ? methodName.substring(0, methodName.indexOf('(')).trim() : methodName.trim();
-        String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
+        String rawMethod = methodName.trim();
+        boolean hasParamHint = rawMethod.contains("(") && rawMethod.contains(")");
+        if (hasParamHint) {
+            rawMethod = rawMethod.substring(0, rawMethod.indexOf('(')).trim();
+        }
 
-        // Pattern matching method header with support for annotations (same-line and preceding)
-        Pattern pattern = Pattern.compile("(?m)^[ \\t]*(?:@[\\w.]+(?:\\([^)]*\\))?\\s+)*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
+        boolean isStaticInit = rawMethod.equals("<clinit>") || rawMethod.equalsIgnoreCase("static");
+        Pattern pattern;
+        if (isStaticInit) {
+            pattern = Pattern.compile("(?m)^[ \\t]*static\\s*\\{");
+        } else {
+            String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
+            pattern = Pattern.compile("(?m)^[ \\t]*(?:@[\\w.]+(?:\\([^)]*\\))?\\s+)*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
+        }
+
         Matcher matcher = pattern.matcher(fullSource);
 
         List<String> matchedMethods = new ArrayList<>();
@@ -292,9 +320,9 @@ public class JavaDecompiler {
             }
             startIdx = currentPos;
 
-            String terminator = matcher.group(1);
+            String matchText = matcher.group();
             String methodBlock;
-            if (";".equals(terminator)) {
+            if (matchText.endsWith(";")) {
                 methodBlock = fullSource.substring(startIdx, matcher.end()).trim();
             } else {
                 int openBraceIdx = matcher.end() - 1;
@@ -321,10 +349,10 @@ public class JavaDecompiler {
             // If a specific parameter signature was requested, filter by matching argument count/types
             if (hasParamHint) {
                 String hint = methodName.substring(methodName.indexOf('(') + 1, methodName.lastIndexOf(')')).replaceAll("\\s+", "");
-                int openP = matcher.group().indexOf('(');
-                int closeP = matcher.group().lastIndexOf(')');
+                int openP = matchText.indexOf('(');
+                int closeP = matchText.lastIndexOf(')');
                 if (openP >= 0 && closeP > openP) {
-                    String actualParams = matcher.group().substring(openP + 1, closeP);
+                    String actualParams = matchText.substring(openP + 1, closeP);
                     String[] hintTypes = hint.isEmpty() ? new String[0] : hint.split(",");
                     String[] actualParamDecls = actualParams.trim().isEmpty() ? new String[0] : actualParams.split(",");
                     if (hintTypes.length == actualParamDecls.length) {

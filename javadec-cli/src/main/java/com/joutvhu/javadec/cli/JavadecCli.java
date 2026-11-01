@@ -215,8 +215,7 @@ public class JavadecCli implements Callable<Integer> {
                 }
 
                 if (method != null && !method.isBlank()) {
-                    byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
-                    String result = decompiler.decompileMethod(file.getName(), bytes, method, options);
+                    String result = decompiler.decompileFileMethod(file, method, options);
                     System.out.println(result);
                 } else {
                     String result = decompiler.decompileFile(file, options);

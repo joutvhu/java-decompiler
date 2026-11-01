@@ -273,8 +273,7 @@ public class JavadecMcpServer {
                                     result = DECOMPILER.decompileArchiveMethod(new File(parts[0]), parts[1], methodName, options);
                                 } else {
                                     File f = new File(target);
-                                    byte[] bytes = Files.readAllBytes(f.toPath());
-                                    result = DECOMPILER.decompileMethod(f.getName(), bytes, methodName, options);
+                                    result = DECOMPILER.decompileFileMethod(f, methodName, options);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
