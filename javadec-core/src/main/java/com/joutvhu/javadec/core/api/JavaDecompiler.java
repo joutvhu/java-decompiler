@@ -436,7 +436,7 @@ public class JavaDecompiler {
                         boolean allTypesMatch = true;
                         for (int k = 0; k < hintTypes.size(); k++) {
                             String hType = hintTypes.get(k).trim();
-                            if (!actualParamDecls.get(k).contains(hType)) {
+                            if (!parameterMatchesType(actualParamDecls.get(k), hType)) {
                                 allTypesMatch = false;
                                 break;
                             }
@@ -455,6 +455,22 @@ public class JavaDecompiler {
             return "// Method '" + methodName + "' not found in decompiled source.";
         }
         return String.join("\n\n", matchedMethods);
+    }
+
+    private static boolean parameterMatchesType(String decl, String hint) {
+        String cleanDecl = decl != null ? decl.trim() : "";
+        String cleanHint = hint != null ? hint.trim() : "";
+        if (cleanDecl.isEmpty() || cleanHint.isEmpty()) {
+            return cleanDecl.equals(cleanHint);
+        }
+        if (cleanDecl.equals(cleanHint)) {
+            return true;
+        }
+        String escaped = Pattern.quote(cleanHint);
+        String pattern = cleanHint.endsWith("[]")
+                ? "(?:^|[^\\w$])" + escaped + "(?:[^\\w$]|$)"
+                : "(?:^|[^\\w$])" + escaped + "(?![\\w$\\[])";
+        return Pattern.compile(pattern).matcher(cleanDecl).find();
     }
 
     /**

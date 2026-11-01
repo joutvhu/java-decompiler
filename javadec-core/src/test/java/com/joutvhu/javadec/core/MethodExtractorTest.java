@@ -116,6 +116,37 @@ public class MethodExtractorTest {
     }
 
     @Test
+    public void testExtractOverloadDistinguishesSubstringTypes() {
+        String code = """
+                package com.example;
+                import java.io.PrintStream;
+                public class Printer {
+                    public void print(PrintStream ps) {
+                        ps.println();
+                    }
+                    public void print(int x) {
+                        System.out.println(x);
+                    }
+                    public void print(int[] arr) {
+                        System.out.println(arr.length);
+                    }
+                }
+                """;
+
+        // "int" must not falsely match "PrintStream" or "int[]"
+        String intResult = decompiler.extractMethodFromSource(code, "print(int)");
+        assertTrue(intResult.contains("public void print(int x)"));
+        assertFalse(intResult.contains("PrintStream"));
+        assertFalse(intResult.contains("int[]"));
+
+        // "int[]" must match array overload
+        String arrResult = decompiler.extractMethodFromSource(code, "print(int[])");
+        assertTrue(arrResult.contains("public void print(int[] arr)"));
+        assertFalse(arrResult.contains("PrintStream"));
+        assertFalse(arrResult.contains("int x"));
+    }
+
+    @Test
     public void testExtractInterfaceMethod() {
         String code = """
                 package com.example;
