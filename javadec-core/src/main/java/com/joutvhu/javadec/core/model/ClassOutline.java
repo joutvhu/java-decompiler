@@ -25,10 +25,15 @@ public record ClassOutline(
             List<String> annotations
     ) {}
 
+    public record ParameterOutline(
+            String type,
+            String name
+    ) {}
+
     public record MethodOutline(
             String name,
             String returnType,
-            List<String> parameterTypes,
+            List<ParameterOutline> parameters,
             List<String> exceptions,
             String accessModifiers,
             List<String> annotations
@@ -99,10 +104,11 @@ public record ClassOutline(
                     sb.append(method.returnType()).append(" ").append(method.name()).append("(");
                 }
 
-                if (method.parameterTypes() != null) {
-                    for (int i = 0; i < method.parameterTypes().size(); i++) {
-                        sb.append(method.parameterTypes().get(i)).append(" arg").append(i);
-                        if (i < method.parameterTypes().size() - 1) {
+                if (method.parameters() != null) {
+                    for (int i = 0; i < method.parameters().size(); i++) {
+                        ParameterOutline p = method.parameters().get(i);
+                        sb.append(p.type()).append(" ").append(p.name());
+                        if (i < method.parameters().size() - 1) {
                             sb.append(", ");
                         }
                     }

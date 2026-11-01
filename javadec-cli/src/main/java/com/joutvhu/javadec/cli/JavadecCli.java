@@ -86,16 +86,24 @@ public class JavadecCli implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath>")
         private String target;
 
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
         @Override
         public Integer call() throws Exception {
             JavaDecompiler decompiler = new JavaDecompiler();
             ClassOutline outline;
 
-            if (target.contains("!")) {
-                String[] parts = target.split("!", 2);
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            if (resolvedTarget.contains("!")) {
+                String[] parts = resolvedTarget.split("!", 2);
                 outline = decompiler.getArchiveClassOutline(new File(parts[0]), parts[1]);
             } else {
-                outline = decompiler.getClassOutline(new File(target));
+                outline = decompiler.getClassOutline(new File(resolvedTarget));
             }
 
             System.out.println(outline.toSkeletonSource());
@@ -107,6 +115,9 @@ public class JavadecCli implements Callable<Integer> {
     static class ViewCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath>")
         private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
 
         @Option(names = {"-m", "--method"}, description = "Decompile only this specific method")
         private String method;
@@ -129,8 +140,13 @@ public class JavadecCli implements Callable<Integer> {
                     .lineLimit(limit)
                     .build();
 
-            if (target.contains("!")) {
-                String[] parts = target.split("!", 2);
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            if (resolvedTarget.contains("!")) {
+                String[] parts = resolvedTarget.split("!", 2);
                 File jar = new File(parts[0]);
                 String classPath = parts[1];
 
@@ -142,7 +158,7 @@ public class JavadecCli implements Callable<Integer> {
                     System.out.println(result);
                 }
             } else {
-                File file = new File(target);
+                File file = new File(resolvedTarget);
                 if (method != null && !method.isBlank()) {
                     byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
                     String result = decompiler.decompileMethod(file.getName(), bytes, method, options);

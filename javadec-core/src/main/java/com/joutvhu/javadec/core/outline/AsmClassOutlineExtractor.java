@@ -7,7 +7,9 @@ import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FieldNode;
+import org.objectweb.asm.tree.LocalVariableNode;
 import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.ParameterNode;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,6 +18,7 @@ import java.util.List;
 
 /**
  * Ultra-fast class metadata and skeleton extractor using ASM without decompiling bytecode.
+ * Extracts authentic method parameter names when available from debug symbols or -parameters flag.
  */
 public class AsmClassOutlineExtractor {
 
@@ -33,7 +36,7 @@ public class AsmClassOutlineExtractor {
 
         ClassReader reader = new ClassReader(compatibleBytecode);
         ClassNode classNode = new ClassNode();
-        reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        reader.accept(classNode, ClassReader.SKIP_CODE | ClassReader.SKIP_FRAMES);
 
         String internalName = classNode.name;
         String packageName = "";
@@ -72,16 +75,48 @@ public class AsmClassOutlineExtractor {
             for (MethodNode mn : classNode.methods) {
                 Type methodType = Type.getMethodType(mn.desc);
                 String returnType = methodType.getReturnType().getClassName();
-                List<String> paramTypes = Arrays.stream(methodType.getArgumentTypes())
-                        .map(Type::getClassName)
-                        .toList();
+                Type[] argTypes = methodType.getArgumentTypes();
+
+                List<ClassOutline.ParameterOutline> parameters = new ArrayList<>();
+                boolean isStatic = (mn.access & Opcodes.ACC_STATIC) != 0;
+                int varOffset = isStatic ? 0 : 1;
+
+                for (int i = 0; i < argTypes.length; i++) {
+                    String typeName = argTypes[i].getClassName();
+                    String paramName = null;
+
+                    // 1. Check -parameters flag info
+                    if (mn.parameters != null && i < mn.parameters.size()) {
+                        ParameterNode pn = mn.parameters.get(i);
+                        if (pn != null && pn.name != null && !pn.name.isBlank()) {
+                            paramName = pn.name;
+                        }
+                    }
+
+                    // 2. Fall back to local variable table
+                    if (paramName == null && mn.localVariables != null) {
+                        for (LocalVariableNode lvn : mn.localVariables) {
+                            if (lvn.index == (varOffset + i) && lvn.name != null && !lvn.name.equals("this")) {
+                                paramName = lvn.name;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 3. Fall back to generic arg<i>
+                    if (paramName == null) {
+                        paramName = "arg" + i;
+                    }
+
+                    parameters.add(new ClassOutline.ParameterOutline(typeName, paramName));
+                }
 
                 List<String> exceptions = mn.exceptions != null ? mn.exceptions : Collections.emptyList();
 
                 methods.add(new ClassOutline.MethodOutline(
                         mn.name,
                         returnType,
-                        paramTypes,
+                        parameters,
                         exceptions,
                         parseAccessModifiers(mn.access),
                         extractAnnotations(mn.visibleAnnotations)

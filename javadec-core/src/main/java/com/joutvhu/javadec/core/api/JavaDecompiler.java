@@ -249,29 +249,39 @@ public class JavaDecompiler {
 
     /**
      * Extracts method declaration(s), preceding annotations, and bodies from decompiled Java source text.
-     * Supports overloaded methods, constructors, interface/abstract methods, and annotations.
+     * Supports overloaded methods, constructors, interface/abstract methods, annotations, and CRLF line endings.
      */
     public String extractMethodFromSource(String fullSource, String methodName) {
-        String cleanMethodName = methodName.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(methodName);
+        String rawMethod = methodName.contains("(") ? methodName.substring(0, methodName.indexOf('(')).trim() : methodName.trim();
+        String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
         Pattern pattern = Pattern.compile("(?m)^[ \\t]*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
         Matcher matcher = pattern.matcher(fullSource);
 
         List<String> matchedMethods = new ArrayList<>();
         while (matcher.find()) {
             int startIdx = matcher.start();
-            // Include preceding annotations/comments on the method
-            String prefix = fullSource.substring(0, startIdx);
-            String[] lines = prefix.split("\r?\n");
-            int backtrackLen = 0;
-            for (int i = lines.length - 1; i >= 0; i--) {
-                String trimmed = lines[i].trim();
-                if (trimmed.startsWith("@") || trimmed.startsWith("/*") || trimmed.startsWith("*") || trimmed.startsWith("//")) {
-                    backtrackLen += lines[i].length() + 1;
+
+            // Precise CRLF/LF backward scan for preceding annotations and Javadocs
+            int currentPos = startIdx;
+            while (currentPos > 0) {
+                int prevLineEnd = currentPos;
+                if (prevLineEnd > 0 && fullSource.charAt(prevLineEnd - 1) == '\n') prevLineEnd--;
+                if (prevLineEnd > 0 && fullSource.charAt(prevLineEnd - 1) == '\r') prevLineEnd--;
+
+                int prevLineStart = prevLineEnd;
+                while (prevLineStart > 0 && fullSource.charAt(prevLineStart - 1) != '\n' && fullSource.charAt(prevLineStart - 1) != '\r') {
+                    prevLineStart--;
+                }
+
+                String prevLineTrimmed = fullSource.substring(prevLineStart, prevLineEnd).trim();
+                if (prevLineTrimmed.startsWith("@") || prevLineTrimmed.startsWith("/*")
+                        || prevLineTrimmed.startsWith("*") || prevLineTrimmed.startsWith("//")) {
+                    currentPos = prevLineStart;
                 } else {
                     break;
                 }
             }
-            startIdx = Math.max(0, startIdx - backtrackLen);
+            startIdx = currentPos;
 
             String terminator = matcher.group(1);
             if (";".equals(terminator)) {

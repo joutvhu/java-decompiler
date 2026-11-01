@@ -24,6 +24,16 @@ public class JavadecMcpServer {
 
     private static final JavaDecompiler DECOMPILER = new JavaDecompiler();
 
+    private static String resolveTarget(Map<String, Object> arguments) {
+        if (arguments.get("target") instanceof String t && !t.isBlank()) {
+            return t;
+        }
+        if (arguments.get("jarPath") instanceof String jar && arguments.get("classPath") instanceof String cls) {
+            return jar + "!" + cls;
+        }
+        return null;
+    }
+
     public static void main(String[] args) {
         StdioServerTransportProvider transportProvider =
                 new StdioServerTransportProvider(McpJsonDefaults.getMapper());
@@ -136,14 +146,19 @@ public class JavadecMcpServer {
                                 .inputSchema(Map.of(
                                         "type", "object",
                                         "properties", Map.of(
-                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>")
-                                        ),
-                                        "required", List.of("target")
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)")
+                                        )
                                 ))
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = (String) request.arguments().get("target");
+                                String target = resolveTarget(request.arguments());
+                                if (target == null || target.isBlank()) {
+                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
+                                }
+
                                 ClassOutline outline;
                                 if (target.contains("!")) {
                                     String[] parts = target.split("!", 2);
@@ -171,15 +186,20 @@ public class JavadecMcpServer {
                                         "type", "object",
                                         "properties", Map.of(
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
-                                        ),
-                                        "required", List.of("target")
+                                        )
                                 ))
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = (String) request.arguments().get("target");
+                                String target = resolveTarget(request.arguments());
+                                if (target == null || target.isBlank()) {
+                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
+                                }
+
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 DecompileOptions options = DecompileOptions.builder()
@@ -214,16 +234,22 @@ public class JavadecMcpServer {
                                         "type", "object",
                                         "properties", Map.of(
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath>"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
                                                 "methodName", Map.of("type", "string", "description", "Name of the method to decompile"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
-                                        "required", List.of("target", "methodName")
+                                        "required", List.of("methodName")
                                 ))
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = (String) request.arguments().get("target");
+                                String target = resolveTarget(request.arguments());
+                                if (target == null || target.isBlank()) {
+                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
+                                }
+
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;

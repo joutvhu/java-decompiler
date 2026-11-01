@@ -116,19 +116,22 @@ public class ZipBytecodeLoader {
 
         if (name.endsWith(".jar")) {
             String base = name.substring(0, name.length() - 4);
+
             // 1. Check <name>-sources.jar in the same directory (standard Maven convention)
             File companion = new File(parent, base + "-sources.jar");
             if (companion.exists() && companion.isFile()) {
                 return companion;
             }
 
-            // 2. Check Gradle cache structure where files-2.1/<group>/<artifact>/<version>/<hash>/ may have sibling hashes
+            // 2. Check Gradle cache structure where files are in sibling hash directories:
+            // e.g. caches/modules-2/files-2.1/<group>/<artifact>/<version>/<hash1>/<artifact>-<version>.jar
+            // and  caches/modules-2/files-2.1/<group>/<artifact>/<version>/<hash2>/<artifact>-<version>-sources.jar
             File versionDir = parent.getParentFile();
-            if (versionDir != null && "modules-2".equals(versionDir.getParentFile() != null ? versionDir.getParentFile().getName() : "")) {
-                File[] hashDirs = versionDir.listFiles(File::isDirectory);
-                if (hashDirs != null) {
-                    for (File h : hashDirs) {
-                        File candidate = new File(h, base + "-sources.jar");
+            if (versionDir != null && versionDir.isDirectory()) {
+                File[] siblingDirs = versionDir.listFiles(File::isDirectory);
+                if (siblingDirs != null) {
+                    for (File sibling : siblingDirs) {
+                        File candidate = new File(sibling, base + "-sources.jar");
                         if (candidate.exists() && candidate.isFile()) {
                             return candidate;
                         }
@@ -158,7 +161,8 @@ public class ZipBytecodeLoader {
         }
 
         // Top-level class name (strip inner class suffix if any, since inner classes live inside outer .java file)
-        int dollarIdx = clean.indexOf('$');
+        int lastSlash = clean.lastIndexOf('/');
+        int dollarIdx = clean.indexOf('$', Math.max(0, lastSlash));
         String topLevelClean = dollarIdx > 0 ? clean.substring(0, dollarIdx) : clean;
         String javaEntryPath = topLevelClean.replace('.', '/') + ".java";
 
