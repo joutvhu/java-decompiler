@@ -24,6 +24,12 @@ public class JavadecMcpServer {
 
     private static final JavaDecompiler DECOMPILER = new JavaDecompiler();
 
+    private static boolean isArchiveFile(String path) {
+        if (path == null) return false;
+        String lower = path.toLowerCase();
+        return lower.endsWith(".jar") || lower.endsWith(".zip") || lower.endsWith(".war") || lower.endsWith(".ear");
+    }
+
     private static String resolveTarget(Map<String, Object> arguments) {
         if (arguments.get("target") instanceof String t && !t.isBlank()) {
             return t;
@@ -32,6 +38,15 @@ public class JavadecMcpServer {
             return jar + "!" + cls;
         }
         return null;
+    }
+
+    private static void validateTarget(String target) {
+        if (target == null || target.isBlank()) {
+            throw new IllegalArgumentException("Either 'target' (e.g. 'library.jar!com/example/MyClass.class') or ('jarPath' and 'classPath') must be specified.");
+        }
+        if (!target.contains("!") && isArchiveFile(target)) {
+            throw new IllegalArgumentException("Target '" + target + "' is an archive. Please specify a class inside the archive (e.g. target: '" + target + "!com/example/MyClass.class' or supply 'classPath').");
+        }
     }
 
     public static void main(String[] args) {
@@ -155,9 +170,7 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String target = resolveTarget(request.arguments());
-                                if (target == null || target.isBlank()) {
-                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
-                                }
+                                validateTarget(target);
 
                                 ClassOutline outline;
                                 if (target.contains("!")) {
@@ -196,9 +209,7 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String target = resolveTarget(request.arguments());
-                                if (target == null || target.isBlank()) {
-                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
-                                }
+                                validateTarget(target);
 
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
@@ -246,9 +257,7 @@ public class JavadecMcpServer {
                         (exchange, request) -> {
                             try {
                                 String target = resolveTarget(request.arguments());
-                                if (target == null || target.isBlank()) {
-                                    throw new IllegalArgumentException("Either 'target' or ('jarPath' and 'classPath') must be specified");
-                                }
+                                validateTarget(target);
 
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;

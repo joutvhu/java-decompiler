@@ -42,6 +42,12 @@ public class JavadecCli implements Callable<Integer> {
         return 0;
     }
 
+    private static boolean isArchiveFile(File file) {
+        if (file == null) return false;
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".jar") || name.endsWith(".zip") || name.endsWith(".war") || name.endsWith(".ear");
+    }
+
     @Command(name = "tree", description = "Display compact hierarchical structure and summary of an archive")
     static class TreeCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .jar or .zip archive")
@@ -55,6 +61,10 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            if (!jarFile.exists()) {
+                System.err.println("Error: File not found: " + jarFile.getPath());
+                return 1;
+            }
             JavaDecompiler decompiler = new JavaDecompiler();
             ArchiveTree tree = decompiler.inspectArchiveTree(jarFile, path, depth);
             System.out.println(tree.formattedTree());
@@ -72,6 +82,10 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            if (!jarFile.exists()) {
+                System.err.println("Error: File not found: " + jarFile.getPath());
+                return 1;
+            }
             JavaDecompiler decompiler = new JavaDecompiler();
             List<String> classes = decompiler.listArchiveClasses(jarFile, pattern);
             for (String cls : classes) {
@@ -91,19 +105,35 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            JavaDecompiler decompiler = new JavaDecompiler();
-            ClassOutline outline;
-
             String resolvedTarget = target;
             if (classInJar != null && !classInJar.isBlank()) {
                 resolvedTarget = target + "!" + classInJar;
             }
 
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ClassOutline outline;
+
             if (resolvedTarget.contains("!")) {
                 String[] parts = resolvedTarget.split("!", 2);
-                outline = decompiler.getArchiveClassOutline(new File(parts[0]), parts[1]);
+                File jar = new File(parts[0]);
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                outline = decompiler.getArchiveClassOutline(jar, parts[1]);
             } else {
-                outline = decompiler.getClassOutline(new File(resolvedTarget));
+                File file = new File(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec outline " + resolvedTarget + " com/example/MyClass.class");
+                    System.err.println("  Or use 'javadec tree " + resolvedTarget + "' to inspect the archive structure.");
+                    return 1;
+                }
+                outline = decompiler.getClassOutline(file);
             }
 
             System.out.println(outline.toSkeletonSource());
@@ -133,6 +163,11 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder()
                     .showLineNumbers(showLines)
@@ -140,14 +175,13 @@ public class JavadecCli implements Callable<Integer> {
                     .lineLimit(limit)
                     .build();
 
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
             if (resolvedTarget.contains("!")) {
                 String[] parts = resolvedTarget.split("!", 2);
                 File jar = new File(parts[0]);
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
                 String classPath = parts[1];
 
                 if (method != null && !method.isBlank()) {
@@ -159,6 +193,17 @@ public class JavadecCli implements Callable<Integer> {
                 }
             } else {
                 File file = new File(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec view " + resolvedTarget + " com/example/MyClass.class");
+                    System.err.println("  Or use 'javadec dump " + resolvedTarget + " -o <outputDir>' to decompile all classes.");
+                    return 1;
+                }
+
                 if (method != null && !method.isBlank()) {
                     byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
                     String result = decompiler.decompileMethod(file.getName(), bytes, method, options);
@@ -188,6 +233,10 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            if (!jarFile.exists()) {
+                System.err.println("Error: File not found: " + jarFile.getPath());
+                return 1;
+            }
             JavaDecompiler decompiler = new JavaDecompiler();
             String content = decompiler.readArchiveResource(jarFile, resourcePath, offset, limit);
             System.out.println(content);
@@ -211,6 +260,10 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            if (!jarFile.exists()) {
+                System.err.println("Error: File not found: " + jarFile.getPath());
+                return 1;
+            }
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder().showLineNumbers(showLines).build();
             ExportResult result = decompiler.exportArchive(jarFile, outputDir, pathFilter, options);
@@ -232,6 +285,10 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
+            if (!jarFile.exists()) {
+                System.err.println("Error: File not found: " + jarFile.getPath());
+                return 1;
+            }
             JavaDecompiler decompiler = new JavaDecompiler();
             int count = decompiler.extractArchive(jarFile, outputDir, pathFilter);
             System.out.println("Extracted " + count + " file(s) to " + outputDir.getAbsolutePath());

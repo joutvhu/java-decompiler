@@ -33,7 +33,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
      * Decompiles a class with optional archive file context or folder context for resolving inner/anonymous classes.
      */
     public String decompileWithContext(String className, byte[] bytecode, File archiveFile, File baseDir, DecompileOptions options) {
-        String cleanName = className.replace('\\', '/');
+        String cleanName = className.replace('\\', '/').replaceAll("^/+", "");
         if (cleanName.endsWith(".class")) {
             cleanName = cleanName.substring(0, cleanName.length() - 6);
         } else if (cleanName.endsWith(".java")) {
@@ -47,11 +47,14 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         Map<String, String> cfrOptions = new HashMap<>();
         cfrOptions.put("comments", "false");
         cfrOptions.put("showversion", "false");
-        if (options != null && options.showLineNumbers()) {
-            cfrOptions.put("trackbytecodeloc", "true");
-        }
-        if (options != null && options.includeSyntheticMembers()) {
-            cfrOptions.put("removeinnerclasssynthetics", "false");
+        if (options != null) {
+            if (options.showLineNumbers()) {
+                cfrOptions.put("trackbytecodeloc", "true");
+            }
+            if (options.includeSyntheticMembers()) {
+                cfrOptions.put("removeinnerclasssynthetics", "false");
+            }
+            cfrOptions.put("removeboilerplate", options.hideDefaultConstructors() ? "true" : "false");
         }
 
         CfrDriver driver = new CfrDriver.Builder()
@@ -92,7 +95,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
 
         @Override
         public Pair<byte[], String> getClassFileContent(String path) throws IOException {
-            String normalizedRequested = path.replace('\\', '/');
+            String normalizedRequested = path.replace('\\', '/').replaceAll("^/+", "");
             if (normalizedRequested.equals(classPath) || normalizedRequested.endsWith("/" + classPath)) {
                 return Pair.make(bytecode, classPath);
             }
