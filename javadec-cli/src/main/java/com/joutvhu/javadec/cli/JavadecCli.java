@@ -187,6 +187,12 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
         private boolean showHex;
 
+        @Option(names = {"-cp", "--classpath"}, description = "Additional classpath (JARs, directory, or Maven GAV)")
+        private String classpath;
+
+        @Option(names = {"--no-deps"}, description = "Disable automatic dependency detection from ~/.m2 and pom.xml")
+        private boolean noDeps;
+
         @Override
         public Integer call() throws Exception {
             String resolvedTarget = target;
@@ -199,6 +205,8 @@ public class JavadecCli implements Callable<Integer> {
                     .showLineNumbers(showLines)
                     .deobfuscate(deobfuscate)
                     .showHexLiterals(showHex)
+                    .extraClasspath(classpath)
+                    .autoDetectDependencies(!noDeps)
                     .lineOffset(offset)
                     .lineLimit(limit)
                     .build();
@@ -620,6 +628,12 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
         private boolean showHex;
 
+        @Option(names = {"-cp", "--classpath"}, description = "Additional classpath (JARs, directory, or Maven GAV)")
+        private String classpath;
+
+        @Option(names = {"--no-deps"}, description = "Disable automatic dependency detection from ~/.m2 and pom.xml")
+        private boolean noDeps;
+
         @Override
         public Integer call() throws Exception {
             File jar = PathUtil.resolveFile(jarFile);
@@ -633,6 +647,8 @@ public class JavadecCli implements Callable<Integer> {
                     .showLineNumbers(showLines)
                     .deobfuscate(deobfuscate)
                     .showHexLiterals(showHex)
+                    .extraClasspath(classpath)
+                    .autoDetectDependencies(!noDeps)
                     .build();
             ExportResult result = decompiler.exportArchive(jar, outDir, pathFilter, options);
             System.out.println(result.toSummaryString());

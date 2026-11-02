@@ -113,6 +113,13 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testViewCommandWithClasspathAndNoDeps() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("view", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class", "-cp", refJar.getAbsolutePath(), "--no-deps");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testResourceCommandWithPagination() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

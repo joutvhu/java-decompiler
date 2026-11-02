@@ -45,7 +45,13 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         }
         String classPath = cleanName.replace('.', '/') + ".class";
 
-        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile, baseDir, inMemoryClasses);
+        List<File> auxiliaryJars = null;
+        if (options != null) {
+            auxiliaryJars = com.joutvhu.javadec.core.loader.AuxiliaryClasspathResolver.resolve(
+                    archiveFile, options.extraClasspath(), options.autoDetectDependencies());
+        }
+
+        MemoryClassFileSource source = new MemoryClassFileSource(classPath, bytecode, archiveFile, baseDir, inMemoryClasses, auxiliaryJars);
         MemoryOutputSinkFactory sinkFactory = new MemoryOutputSinkFactory();
 
         Map<String, String> cfrOptions = new HashMap<>();
@@ -85,13 +91,15 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         private final File archiveFile;
         private final File baseDir;
         private final Map<String, byte[]> inMemoryClasses;
+        private final List<File> auxiliaryJars;
 
-        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile, File baseDir, Map<String, byte[]> inMemoryClasses) {
+        public MemoryClassFileSource(String classPath, byte[] bytecode, File archiveFile, File baseDir, Map<String, byte[]> inMemoryClasses, List<File> auxiliaryJars) {
             this.classPath = classPath;
             this.bytecode = bytecode;
             this.archiveFile = archiveFile;
             this.baseDir = baseDir;
             this.inMemoryClasses = inMemoryClasses;
+            this.auxiliaryJars = auxiliaryJars;
         }
 
         @Override
@@ -150,6 +158,18 @@ public class CfrDecompilerEngine implements DecompilerEngine {
                 }
                 if (inMem != null) {
                     return Pair.make(inMem, normalizedRequested);
+                }
+            }
+
+            // 4. Resolve from auxiliary/dependency JARs on-demand
+            if (auxiliaryJars != null && !auxiliaryJars.isEmpty()) {
+                for (File auxJar : auxiliaryJars) {
+                    if (auxJar != null && auxJar.exists() && auxJar.isFile()) {
+                        try {
+                            byte[] auxBytes = ZipBytecodeLoader.loadClassBytes(auxJar, normalizedRequested);
+                            return Pair.make(auxBytes, normalizedRequested);
+                        } catch (IOException ignored) {}
+                    }
                 }
             }
 

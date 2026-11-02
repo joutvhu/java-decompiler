@@ -317,6 +317,8 @@ public class JavadecMcpServer {
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> (supports ~ and $HOME)"),
                                                 "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')"),
+                                                "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
                                                 "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
                                                 "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
@@ -337,7 +339,12 @@ public class JavadecMcpServer {
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                String classpath = (String) request.arguments().get("classpath");
+                                boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
+
                                 DecompileOptions options = DecompileOptions.builder()
+                                        .extraClasspath(classpath)
+                                        .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
                                         .lineOffset(lineOffset)
@@ -376,6 +383,8 @@ public class JavadecMcpServer {
                                                 "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
                                                 "methodName", Map.of("type", "string", "description", "Name of the method to decompile"),
+                                                "classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')"),
+                                                "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
                                                 "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
                                                 "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
@@ -398,7 +407,12 @@ public class JavadecMcpServer {
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                String classpath = (String) request.arguments().get("classpath");
+                                boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
+
                                 DecompileOptions options = DecompileOptions.builder()
+                                        .extraClasspath(classpath)
+                                        .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
                                         .lineOffset(lineOffset)
@@ -794,6 +808,8 @@ public class JavadecMcpServer {
                                                 "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive (supports ~ and $HOME)"),
                                                 "outputDir", Map.of("type", "string", "description", "Directory path on disk to output decompiled .java source files"),
                                                 "pathFilter", Map.of("type", "string", "description", "Optional package or path filter (e.g. com/example/service)"),
+                                                "classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')"),
+                                                "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
                                                 "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
                                                 "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal")
                                         ),
@@ -813,7 +829,12 @@ public class JavadecMcpServer {
                                 String pathFilter = (String) request.arguments().get("pathFilter");
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                String classpath = (String) request.arguments().get("classpath");
+                                boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
+
                                 DecompileOptions options = DecompileOptions.builder()
+                                        .extraClasspath(classpath)
+                                        .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
                                         .build();

@@ -55,6 +55,7 @@ When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Works
 ## ✨ Key Features
 
 - **📖 Sources-Aware Inspection (Javadoc Preservation)**: Automatically locates companion `<artifact>-<version>-sources.jar` in Maven local repository (`~/.m2/repository`) or Gradle cache (`~/.gradle/caches`). When present, it serves original author source code with **100% of Javadocs and inline comments intact**!
+- **🔗 Automatic Dependency & Classpath Resolution**: Automatically identifies external dependencies from companion `.pom` files in `~/.m2/repository`, embedded `pom.xml` inside JARs, and `BOOT-INF/lib`. Supports manual `-cp, --classpath` with directories or Maven GAVs for 100% type-system precision.
 - **📦 Direct Maven Coordinate Resolution (`g:a:v`)**: Inspect libraries directly by Maven coordinates (e.g. `org.springframework:spring-core:6.1.0`), checking `~/.m2/repository` and auto-downloading from Maven Central on-demand.
 - **⚡ Token-Efficient Skeletons via ASM (`outline`)**: Extracts full class signatures, fields, annotations, constructors, and parameter names in ~100–300 tokens without decompiling method bodies.
 - **🔍 Instant Bytecode Reference & Caller Search (`find` / `refs`)**: Scans thousands of classes in milliseconds directly in bytecode to locate all callers of a method, field reads/writes, or class instantiations with line numbers.
@@ -289,14 +290,14 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | **`find_references`** | `jarPath` (req), `target` (req), `limit` (opt), `pathFilter` (opt) | Finds all callers, field accesses, or class usages directly from bytecode with line numbers. |
 | **`get_callees`** | `target` (req), `methodName` (opt), `limit` (opt) | Extracts outgoing method calls (callees) called from within a class or method. |
 | **`analyze_dependencies`** | `target` (req) | Analyzes and categorizes imported classes and packages (JDK, internal, third-party). |
-| **`decompile_class`** | `target` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc). |
-| **`decompile_method`** | `target` (req), `methodName` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
+| **`decompile_class`** | `target` (req), `classpath` (opt), `autoDetectDependencies` (opt), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc and external dependencies). |
+| **`decompile_method`** | `target` (req), `methodName` (req), `classpath` (opt), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
 | **`disassemble_bytecode`** | `target` (req), `methodName` (opt), `lineOffset` (opt), `lineLimit` (opt) | Disassembles bytecode into human-readable JVM instructions and opcodes. |
 | **`extract_jar_strings`** | `jarPath` (req), `pathFilter` (opt), `textFilter` (opt), `minLength` (opt), `limit` (opt) | Extracts hardcoded string constants (URLs, SQL, tokens, error messages) without decompilation. |
 | **`inspect_stack_line`** | `target` (req), `lineNumber` (req), `contextLines` (opt) | Locates and extracts source snippet surrounding an exception stack trace line (~95% token savings). |
 | **`jar_diff`** | `jar1` (req), `jar2` (req), `packageFilter` (opt), `breakingOnly` (opt) | Compares binary public API differences and breaking changes between two JARs or versions. |
 | **`inspect_manifest`** | `jarPath` (req) | Inspects structured packaging metadata, MANIFEST.MF attributes, and SPI services. |
-| **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Decompiles entire archive or package into `.java` files on disk. |
+| **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt), `classpath` (opt) | Decompiles entire archive or package into `.java` files on disk. |
 | **`extract_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Extracts raw archive files (bytecode and resources) to disk as-is. |
 
 ---

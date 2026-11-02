@@ -85,10 +85,10 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec trace <target> <lineNumber> [-C <context>]` (alias: `stack`)
 - `javadec diff <jar1> <jar2> [-p <filter>] [--breaking-only]` (alias: `delta`)
 - `javadec manifest <archiveOrGav>`
-- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
-- `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
+- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
+- `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
 - `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)
-- `javadec dump <jarPath> -o <outputDir> [-p <filter>] [--deobfuscate] [--hex]` (alias: `export`)
+- `javadec dump <jarPath> -o <outputDir> [-p <filter>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]` (alias: `export`)
 - `javadec extract <jarPath> -o <outputDir> [-p <filter>]`
 
 *Note on Java Runtime: If the system default Java is older than Java 21, set `JAVADEC_JAVA_PATH` or `JAVADEC_JAVA_HOME` pointing to a JDK 21+ installation when executing CLI commands.*

@@ -373,6 +373,8 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .extraClasspath(opts.extraClasspath())
+                .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = defaultEngine.decompile(className, bytecode, unpagedOpts);
@@ -392,6 +394,8 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .extraClasspath(opts.extraClasspath())
+                .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = decompileFile(classFile, unpagedOpts);
@@ -411,6 +415,8 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .extraClasspath(opts.extraClasspath())
+                .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = decompileArchiveClass(archiveFile, classPath, unpagedOpts);
