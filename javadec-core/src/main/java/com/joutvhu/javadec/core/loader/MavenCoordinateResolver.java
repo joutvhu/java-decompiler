@@ -11,15 +11,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Resolves Maven GAV coordinates (e.g. 'org.springframework:spring-core:6.1.0') into local JAR files.
- * Checks local Maven repository (~/.m2/repository) and Gradle cache first;
- * if absent, automatically downloads the artifact (and companion sources jar) from Maven Central.
+ * Automatically respects user and corporate ~/.m2/settings.xml (custom localRepository, Nexus/Artifactory mirrors,
+ * private repositories, and server authentication tokens).
  */
 public class MavenCoordinateResolver {
 
-    private static final String MAVEN_CENTRAL_URL = "https://repo1.maven.org/maven2";
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -47,16 +48,18 @@ public class MavenCoordinateResolver {
         String jarFileName = artifactId + "-" + version + ".jar";
         String sourcesFileName = artifactId + "-" + version + "-sources.jar";
 
-        String userHome = System.getProperty("user.home");
+        MavenSettings settings = MavenSettings.load();
+        String localRepoPath = settings.getLocalRepositoryPath();
 
-        // 1. Check local Maven repository
-        File m2RepoDir = new File(userHome, ".m2/repository/" + groupPath + "/" + artifactId + "/" + version);
+        // 1. Check local Maven repository (respecting custom <localRepository> from settings.xml)
+        File m2RepoDir = new File(localRepoPath, groupPath + "/" + artifactId + "/" + version);
         File localM2Jar = new File(m2RepoDir, jarFileName);
         if (localM2Jar.exists() && localM2Jar.isFile()) {
             return localM2Jar;
         }
 
         // 2. Check Gradle cache
+        String userHome = System.getProperty("user.home");
         File gradleCacheDir = new File(userHome, ".gradle/caches/modules-2/files-2.1/" + groupId + "/" + artifactId + "/" + version);
         if (gradleCacheDir.exists() && gradleCacheDir.isDirectory()) {
             File[] hashDirs = gradleCacheDir.listFiles(File::isDirectory);
@@ -70,51 +73,70 @@ public class MavenCoordinateResolver {
             }
         }
 
-        // 3. Download from Maven Central into local repository
+        // 3. Download from configured repositories (mirrors, active profiles, corporate Nexus, and central fallback)
         m2RepoDir.mkdirs();
-        String remoteUrl = MAVEN_CENTRAL_URL + "/" + groupPath + "/" + artifactId + "/" + version + "/" + jarFileName;
-        System.err.println("[javadec] Downloading " + coordinate + " from Maven Central...");
+        List<String> triedUrls = new ArrayList<>();
+        boolean downloaded = false;
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(remoteUrl))
-                .timeout(Duration.ofSeconds(60))
-                .header("User-Agent", "javadec/1.0.0 (Java Decompiler for AI & Developers)")
-                .GET()
-                .build();
+        for (MavenSettings.RepoConfig repo : settings.getRepositories()) {
+            String remoteJarUrl = repo.url() + "/" + groupPath + "/" + artifactId + "/" + version + "/" + jarFileName;
+            triedUrls.add(remoteJarUrl);
 
-        HttpResponse<InputStream> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
-        if (response.statusCode() == 404) {
-            throw new FileNotFoundException("Artifact not found in Maven Central: " + coordinate + " (URL: " + remoteUrl + ")");
-        }
-        if (response.statusCode() != 200) {
-            throw new Exception("Failed to download " + coordinate + " (HTTP " + response.statusCode() + " from " + remoteUrl + ")");
-        }
-
-        Path targetPath = localM2Jar.toPath();
-        try (InputStream is = response.body()) {
-            Files.copy(is, targetPath, StandardCopyOption.REPLACE_EXISTING);
-        }
-
-        // 4. Concurrently attempt to download companion -sources.jar for Javadocs (best-effort)
-        try {
-            File localSourcesJar = new File(m2RepoDir, sourcesFileName);
-            if (!localSourcesJar.exists()) {
-                String sourcesRemoteUrl = MAVEN_CENTRAL_URL + "/" + groupPath + "/" + artifactId + "/" + version + "/" + sourcesFileName;
-                HttpRequest sourcesReq = HttpRequest.newBuilder()
-                        .uri(URI.create(sourcesRemoteUrl))
+            try {
+                HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
+                        .uri(URI.create(remoteJarUrl))
                         .timeout(Duration.ofSeconds(30))
-                        .GET()
-                        .build();
-                HTTP_CLIENT.sendAsync(sourcesReq, HttpResponse.BodyHandlers.ofInputStream())
-                        .thenAccept(res -> {
-                            if (res.statusCode() == 200) {
-                                try (InputStream sis = res.body()) {
-                                    Files.copy(sis, localSourcesJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                                } catch (Exception ignored) {}
+                        .header("User-Agent", "javadec/1.0.0 (Java Decompiler for AI & Developers)")
+                        .GET();
+
+                String auth = settings.getAuthorizationHeader(repo.id());
+                if (auth != null) {
+                    reqBuilder.header("Authorization", auth);
+                }
+
+                HttpResponse<InputStream> response = HTTP_CLIENT.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofInputStream());
+                if (response.statusCode() == 200) {
+                    System.err.println("[javadec] Downloaded " + coordinate + " from " + repo.url());
+                    Path targetPath = localM2Jar.toPath();
+                    try (InputStream is = response.body()) {
+                        Files.copy(is, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    downloaded = true;
+
+                    // 4. Concurrently attempt to download companion -sources.jar from the same repository (best-effort)
+                    try {
+                        File localSourcesJar = new File(m2RepoDir, sourcesFileName);
+                        if (!localSourcesJar.exists()) {
+                            String remoteSourcesUrl = repo.url() + "/" + groupPath + "/" + artifactId + "/" + version + "/" + sourcesFileName;
+                            HttpRequest.Builder sourcesReq = HttpRequest.newBuilder()
+                                    .uri(URI.create(remoteSourcesUrl))
+                                    .timeout(Duration.ofSeconds(20))
+                                    .header("User-Agent", "javadec/1.0.0 (Java Decompiler for AI & Developers)")
+                                    .GET();
+                            if (auth != null) {
+                                sourcesReq.header("Authorization", auth);
                             }
-                        });
+                            HTTP_CLIENT.sendAsync(sourcesReq.build(), HttpResponse.BodyHandlers.ofInputStream())
+                                    .thenAccept(res -> {
+                                        if (res.statusCode() == 200) {
+                                            try (InputStream sis = res.body()) {
+                                                Files.copy(sis, localSourcesJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                                            } catch (Exception ignored) {}
+                                        }
+                                    });
+                        }
+                    } catch (Exception ignored) {}
+
+                    break;
+                }
+            } catch (Exception ignored) {
+                // Try next repository
             }
-        } catch (Exception ignored) {}
+        }
+
+        if (!downloaded || !localM2Jar.exists()) {
+            throw new FileNotFoundException("Artifact not found: " + coordinate + ". Attempted repositories: " + triedUrls);
+        }
 
         return localM2Jar;
     }

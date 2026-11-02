@@ -33,4 +33,12 @@ public class MavenCoordinateResolverTest {
         assertTrue(jar.exists(), "Local Maven repo should contain asm:9.7: " + jar.getAbsolutePath());
         assertTrue(jar.getName().startsWith("asm-9.7.jar"));
     }
+
+    @Test
+    public void testLoadMavenSettings() {
+        var settings = com.joutvhu.javadec.core.loader.MavenSettings.load();
+        assertNotNull(settings);
+        assertNotNull(settings.getLocalRepositoryPath());
+        assertFalse(settings.getRepositories().isEmpty());
+    }
 }
