@@ -38,8 +38,8 @@ jobs:
 
       - name: Run Maven Tests
         run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            .\mvnw.cmd clean test
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmd.exe /c "mvnw.cmd clean test"
           else
             ./mvnw clean test
           fi
