@@ -69,6 +69,7 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `inspect_stack_line(target, lineNumber, contextLines?)` — extract focused snippet surrounding a stack trace line (~95% token savings)
 - `jar_diff(jar1, jar2, packageFilter?, breakingOnly?)` — compare binary API differences and breaking changes between two JARs or versions
 - `inspect_manifest(jarPath)` — structured packaging metadata, main-class, build JDK, and SPI services
+- `inspect_module(jarPath)` — extract JPMS module declaration (requires, exports, opens, uses, provides)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
 - `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
@@ -85,6 +86,7 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec trace <target> <lineNumber> [-C <context>]` (alias: `stack`)
 - `javadec diff <jar1> <jar2> [-p <filter>] [--breaking-only]` (alias: `delta`)
 - `javadec manifest <archiveOrGav>`
+- `javadec module <archiveOrGav>` (aliases: `jpms`)
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
 - `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
 - `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)

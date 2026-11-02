@@ -113,6 +113,30 @@ public class ClassOutlineTest {
     }
 
     @Test
+    public void testModuleSkeleton() {
+        ClassOutline outline = new ClassOutline(
+                "org.objectweb.asm",
+                "",
+                "open",
+                "open module",
+                null,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of("requires java.base", "exports org.objectweb.asm"),
+                65
+        );
+
+        String skel = outline.toSkeletonSource();
+        assertTrue(skel.contains("open module org.objectweb.asm {"));
+        assertTrue(skel.contains("requires java.base;"));
+        assertTrue(skel.contains("exports org.objectweb.asm;"));
+    }
+
+    @Test
     public void testEnumSkeleton() {
         ClassOutline outline = new ClassOutline(
                 "com/example/Status",

@@ -37,6 +37,7 @@ import java.util.concurrent.Callable;
                 JavadecCli.TraceCommand.class,
                 JavadecCli.DiffCommand.class,
                 JavadecCli.ManifestCommand.class,
+                JavadecCli.ModuleCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -604,6 +605,26 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             ManifestSummary summary = decompiler.inspectManifest(jar);
             System.out.println(summary.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "module", aliases = {"jpms"}, description = "Inspect and extract the JPMS module declaration (requires, exports, opens, uses, provides) from an archive")
+    static class ModuleCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar or .zip archive or Maven GAV")
+        private String target;
+
+        @Override
+        public Integer call() throws Exception {
+            File jar = PathUtil.resolveFile(target);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            String moduleInfo = decompiler.inspectModule(jar);
+            System.out.println(moduleInfo);
             return 0;
         }
     }

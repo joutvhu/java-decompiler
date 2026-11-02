@@ -147,6 +147,18 @@ public class JavaDecompiler {
     }
 
     /**
+     * Inspects and extracts the JPMS module declaration (requires, exports, opens, uses, provides) from an archive.
+     */
+    public String inspectModule(File archiveFile) throws IOException {
+        try {
+            ClassOutline outline = getArchiveClassOutline(archiveFile, "module-info.class");
+            return outline.toSkeletonSource();
+        } catch (IOException e) {
+            return "// No module-info.class found in archive: " + archiveFile.getName();
+        }
+    }
+
+    /**
      * Extracts raw files from an archive to a destination directory on disk.
      */
     public int extractArchive(File archiveFile, File targetDir, String pathFilter) throws IOException {

@@ -59,6 +59,55 @@ public class AsmClassOutlineExtractor {
             classKind = "record";
         }
 
+        List<String> moduleDirectives = new ArrayList<>();
+        if (classNode.module != null) {
+            boolean isOpen = (classNode.module.access & Opcodes.ACC_OPEN) != 0;
+            classKind = isOpen ? "open module" : "module";
+            internalName = classNode.module.name != null ? classNode.module.name : "module-info";
+
+            if (classNode.module.requires != null) {
+                for (var r : classNode.module.requires) {
+                    StringBuilder req = new StringBuilder("requires ");
+                    if ((r.access & Opcodes.ACC_TRANSITIVE) != 0) req.append("transitive ");
+                    if ((r.access & Opcodes.ACC_STATIC_PHASE) != 0) req.append("static ");
+                    req.append(r.module);
+                    moduleDirectives.add(req.toString());
+                }
+            }
+            if (classNode.module.exports != null) {
+                for (var e : classNode.module.exports) {
+                    StringBuilder exp = new StringBuilder("exports ").append(e.packaze.replace('/', '.'));
+                    if (e.modules != null && !e.modules.isEmpty()) {
+                        exp.append(" to ").append(String.join(", ", e.modules));
+                    }
+                    moduleDirectives.add(exp.toString());
+                }
+            }
+            if (classNode.module.opens != null) {
+                for (var o : classNode.module.opens) {
+                    StringBuilder opn = new StringBuilder("opens ").append(o.packaze.replace('/', '.'));
+                    if (o.modules != null && !o.modules.isEmpty()) {
+                        opn.append(" to ").append(String.join(", ", o.modules));
+                    }
+                    moduleDirectives.add(opn.toString());
+                }
+            }
+            if (classNode.module.uses != null) {
+                for (String u : classNode.module.uses) {
+                    moduleDirectives.add("uses " + u.replace('/', '.'));
+                }
+            }
+            if (classNode.module.provides != null) {
+                for (var p : classNode.module.provides) {
+                    StringBuilder prv = new StringBuilder("provides ").append(p.service.replace('/', '.')).append(" with ");
+                    if (p.providers != null) {
+                        prv.append(String.join(", ", p.providers.stream().map(s -> s.replace('/', '.')).toList()));
+                    }
+                    moduleDirectives.add(prv.toString());
+                }
+            }
+        }
+
         String accessModifiers = parseClassModifiers(classNode.access);
         List<String> annotations = extractAnnotations(classNode.visibleAnnotations, classNode.invisibleAnnotations);
 
@@ -169,6 +218,7 @@ public class AsmClassOutlineExtractor {
                 enumConstants,
                 fields,
                 methods,
+                moduleDirectives,
                 originalMajorVersion > 0 ? originalMajorVersion : (classNode.version & 0xFFFF)
         );
     }

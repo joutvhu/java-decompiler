@@ -4,15 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Represents the outline (skeleton/signature) of a Java class/interface/record/enum.
+ * Represents the outline (skeleton/signature) of a Java class/interface/record/enum/module.
  * Extremely token-efficient, allowing AI agents to understand API structures without full method bodies.
- * Natively renders clean, syntactically valid Java syntax for classes, interfaces, records, and enums.
+ * Natively renders clean, syntactically valid Java syntax for classes, interfaces, records, enums, and JPMS modules.
  */
 public record ClassOutline(
         String className,
         String packageName,
         String accessModifiers,
-        String classKind, // class, interface, enum, record, @interface
+        String classKind, // class, interface, enum, record, @interface, module, open module
         String superClassName,
         List<String> interfaces,
         List<String> annotations,
@@ -20,8 +20,27 @@ public record ClassOutline(
         List<String> enumConstants,
         List<FieldOutline> fields,
         List<MethodOutline> methods,
+        List<String> moduleDirectives,
         int bytecodeMajorVersion
 ) {
+    public ClassOutline(
+            String className,
+            String packageName,
+            String accessModifiers,
+            String classKind,
+            String superClassName,
+            List<String> interfaces,
+            List<String> annotations,
+            List<RecordComponentOutline> recordComponents,
+            List<String> enumConstants,
+            List<FieldOutline> fields,
+            List<MethodOutline> methods,
+            int bytecodeMajorVersion
+    ) {
+        this(className, packageName, accessModifiers, classKind, superClassName, interfaces, annotations,
+                recordComponents, enumConstants, fields, methods, List.of(), bytecodeMajorVersion);
+    }
+
     public record RecordComponentOutline(
             String type,
             String name
@@ -53,6 +72,22 @@ public record ClassOutline(
      */
     public String toSkeletonSource() {
         StringBuilder sb = new StringBuilder();
+
+        // Render JPMS module-info e.g. module org.example { exports ...; requires ...; }
+        if ("module".equals(classKind) || "open module".equals(classKind)) {
+            for (String ann : annotations) {
+                sb.append("@").append(ann).append("\n");
+            }
+            sb.append(classKind).append(" ").append(className).append(" {\n");
+            if (moduleDirectives != null) {
+                for (String dir : moduleDirectives) {
+                    sb.append("    ").append(dir).append(";\n");
+                }
+            }
+            sb.append("}\n");
+            return sb.toString();
+        }
+
         if (packageName != null && !packageName.isEmpty()) {
             sb.append("package ").append(packageName).append(";\n\n");
         }

@@ -800,6 +800,38 @@ public class JavadecMcpServer {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("inspect_module")
+                                .description("Inspect and extract JPMS module declaration (requires, exports, opens, uses, provides) from an archive")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive or Maven GAV coordinate")
+                                        ),
+                                        "required", List.of("jarPath")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+                                String moduleInfo = DECOMPILER.inspectModule(jar);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(moduleInfo)))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("export_archive")
                                 .description("Decompile all (or filtered) classes in an archive into .java files on disk, copying resources and maintaining package structure")
                                 .inputSchema(Map.of(

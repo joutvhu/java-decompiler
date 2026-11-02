@@ -197,6 +197,13 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testModuleCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("module", refJar.getAbsolutePath());
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

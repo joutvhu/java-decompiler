@@ -198,4 +198,13 @@ public class JavadecMcpServerTest {
             assertNotNull(res.formattedSummary());
         });
     }
+
+    @Test
+    public void testInspectModuleExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.inspectModule(refJar);
+            assertNotNull(res);
+        });
+    }
 }
