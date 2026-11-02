@@ -69,7 +69,32 @@ public class JavadecCli implements Callable<Integer> {
     private static boolean isArchiveFile(File file) {
         if (file == null) return false;
         String name = file.getName().toLowerCase();
-        return name.endsWith(".jar") || name.endsWith(".zip") || name.endsWith(".war") || name.endsWith(".ear");
+        return name.endsWith(".jar") || name.endsWith(".zip") || name.endsWith(".war") || name.endsWith(".ear")
+                || com.joutvhu.javadec.core.loader.MavenCoordinateResolver.isMavenCoordinate(file.getPath());
+    }
+
+    record TargetSpec(File jar, String classPath, File standaloneFile) {
+        public boolean isArchive() {
+            return jar != null;
+        }
+    }
+
+    private static TargetSpec resolveTarget(String target, String classInJar) {
+        if (classInJar != null && !classInJar.isBlank()) {
+            File jar = PathUtil.resolveFile(target);
+            return new TargetSpec(jar, classInJar.trim(), null);
+        }
+        File f = PathUtil.resolveFile(target);
+        if (f != null && f.exists() && !isArchiveFile(f)) {
+            return new TargetSpec(null, null, f);
+        }
+        int bangIdx = target != null ? target.lastIndexOf('!') : -1;
+        if (bangIdx >= 0) {
+            File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+            String classPath = target.substring(bangIdx + 1);
+            return new TargetSpec(jar, classPath, null);
+        }
+        return new TargetSpec(null, null, f);
     }
 
     @Command(name = "tree", description = "Display compact hierarchical structure and summary of an archive")
@@ -134,32 +159,26 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             ClassOutline outline;
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                outline = decompiler.getArchiveClassOutline(jar, resolvedTarget.substring(bangIdx + 1));
+                outline = decompiler.getArchiveClassOutline(spec.jar(), spec.classPath());
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 if (isArchiveFile(file)) {
-                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
-                    System.err.println("  Example: javadec outline " + resolvedTarget + " com/example/MyClass.class");
-                    System.err.println("  Or use 'javadec tree " + resolvedTarget + "' to inspect the archive structure.");
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec outline " + target + " com/example/MyClass.class");
+                    System.err.println("  Or use 'javadec tree " + target + "' to inspect the archive structure.");
                     return 1;
                 }
                 outline = decompiler.getClassOutline(file);
@@ -207,11 +226,7 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder()
                     .showLineNumbers(showLines)
@@ -224,32 +239,28 @@ public class JavadecCli implements Callable<Integer> {
                     .lineLimit(limit)
                     .build();
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                String classPath = resolvedTarget.substring(bangIdx + 1);
-
                 if (method != null && !method.isBlank()) {
-                    String result = decompiler.decompileArchiveMethod(jar, classPath, method, options);
+                    String result = decompiler.decompileArchiveMethod(spec.jar(), spec.classPath(), method, options);
                     System.out.println(result);
                 } else {
-                    String result = decompiler.decompileArchiveClass(jar, classPath, options);
+                    String result = decompiler.decompileArchiveClass(spec.jar(), spec.classPath(), options);
                     System.out.println(result);
                 }
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 if (isArchiveFile(file)) {
-                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
-                    System.err.println("  Example: javadec view " + resolvedTarget + " com/example/MyClass.class");
-                    System.err.println("  Or use 'javadec dump " + resolvedTarget + " -o <outputDir>' to decompile all classes.");
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec view " + target + " com/example/MyClass.class");
+                    System.err.println("  Or use 'javadec dump " + target + " -o <outputDir>' to decompile all classes.");
                     return 1;
                 }
 
@@ -284,32 +295,25 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                String classPath = resolvedTarget.substring(bangIdx + 1);
-                String result = decompiler.disassembleArchiveClass(jar, classPath, method, offset, limit);
+                String result = decompiler.disassembleArchiveClass(spec.jar(), spec.classPath(), method, offset, limit);
                 System.out.println(result);
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 if (isArchiveFile(file)) {
-                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
-                    System.err.println("  Example: javadec disasm " + resolvedTarget + " com/example/MyClass.class");
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec disasm " + target + " com/example/MyClass.class");
                     return 1;
                 }
                 String result = decompiler.disassembleFile(file, method, offset, limit);
@@ -427,26 +431,20 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             CalleeResult result;
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                result = decompiler.getArchiveCallees(jar, resolvedTarget.substring(bangIdx + 1), method, limit);
+                result = decompiler.getArchiveCallees(spec.jar(), spec.classPath(), method, limit);
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());
@@ -468,26 +466,20 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             DependencyAnalysisResult result;
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                result = decompiler.analyzeArchiveDependencies(jar, resolvedTarget.substring(bangIdx + 1));
+                result = decompiler.analyzeArchiveDependencies(spec.jar(), spec.classPath());
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());
@@ -572,20 +564,19 @@ public class JavadecCli implements Callable<Integer> {
             }
 
             JavaDecompiler decompiler = new JavaDecompiler();
-            int bangIdx = resolvedTarget.lastIndexOf('!');
+            TargetSpec spec = resolveTarget(resolvedTarget, null);
             StackTraceSnippetResult snippet;
 
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                snippet = decompiler.inspectStackTraceLine(jar, resolvedTarget.substring(bangIdx + 1), targetLine, contextLines);
+                snippet = decompiler.inspectStackTraceLine(spec.jar(), spec.classPath(), targetLine, contextLines);
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : resolvedTarget));
                     return 1;
                 }
                 snippet = decompiler.inspectStackTraceLine(null, file.getPath(), targetLine, contextLines);
@@ -716,26 +707,20 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             ClassMetricsResult result;
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                result = decompiler.extractArchiveMetrics(jar, resolvedTarget.substring(bangIdx + 1), method);
+                result = decompiler.extractArchiveMetrics(spec.jar(), spec.classPath(), method);
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());
@@ -757,26 +742,20 @@ public class JavadecCli implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            String resolvedTarget = target;
-            if (classInJar != null && !classInJar.isBlank()) {
-                resolvedTarget = target + "!" + classInJar;
-            }
-
+            TargetSpec spec = resolveTarget(target, classInJar);
             JavaDecompiler decompiler = new JavaDecompiler();
             ClassHierarchyResult result;
 
-            int bangIdx = resolvedTarget.lastIndexOf('!');
-            if (bangIdx >= 0) {
-                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
-                if (!jar.exists()) {
-                    System.err.println("Error: Archive file not found: " + jar.getPath());
+            if (spec.isArchive()) {
+                if (!spec.jar().exists()) {
+                    System.err.println("Error: Archive file not found: " + spec.jar().getPath());
                     return 1;
                 }
-                result = decompiler.getArchiveClassHierarchy(jar, resolvedTarget.substring(bangIdx + 1));
+                result = decompiler.getArchiveClassHierarchy(spec.jar(), spec.classPath());
             } else {
-                File file = PathUtil.resolveFile(resolvedTarget);
-                if (!file.exists()) {
-                    System.err.println("Error: File not found: " + file.getPath());
+                File file = spec.standaloneFile();
+                if (file == null || !file.exists()) {
+                    System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());

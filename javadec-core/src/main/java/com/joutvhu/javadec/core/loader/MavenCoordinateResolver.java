@@ -29,23 +29,29 @@ public class MavenCoordinateResolver {
     public static boolean isMavenCoordinate(String input) {
         if (input == null) return false;
         String s = input.trim();
-        if (s.contains("/") || s.contains("\\")) return false;
+        if (s.contains("/") || s.contains("\\") || s.contains("..")) return false;
         if (s.length() >= 2 && s.charAt(1) == ':') return false; // Windows drive letter
         String[] parts = s.split(":");
         return parts.length >= 3 && parts.length <= 4 && !parts[0].isEmpty() && !parts[1].isEmpty() && !parts[2].isEmpty();
     }
 
     /**
-     * Resolves a coordinate 'groupId:artifactId:version' to a local File on disk.
+     * Resolves a coordinate 'groupId:artifactId:version' or 'groupId:artifactId:version:classifier' to a local File on disk.
      */
     public static File resolveCoordinate(String coordinate) throws Exception {
+        if (!isMavenCoordinate(coordinate)) {
+            throw new IllegalArgumentException("Invalid Maven coordinate: " + coordinate);
+        }
         String[] parts = coordinate.trim().split(":");
         String groupId = parts[0].trim();
         String artifactId = parts[1].trim();
         String version = parts[2].trim();
+        String classifier = parts.length == 4 ? parts[3].trim() : null;
 
         String groupPath = groupId.replace('.', '/');
-        String jarFileName = artifactId + "-" + version + ".jar";
+        String jarFileName = (classifier != null && !classifier.isEmpty())
+                ? artifactId + "-" + version + "-" + classifier + ".jar"
+                : artifactId + "-" + version + ".jar";
         String sourcesFileName = artifactId + "-" + version + "-sources.jar";
 
         MavenSettings settings = MavenSettings.load();

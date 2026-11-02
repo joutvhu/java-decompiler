@@ -8,6 +8,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -111,11 +112,19 @@ public class AuxiliaryClasspathResolver {
                             tempLibDir.deleteOnExit();
                         }
                         String jarName = name.substring(name.lastIndexOf('/') + 1);
+                        if (jarName.contains("..") || jarName.contains("/") || jarName.contains("\\")) {
+                            continue; // Skip suspicious entry names
+                        }
                         File tempJar = new File(tempLibDir, jarName);
+                        Path tempJarPath = tempJar.toPath().toAbsolutePath().normalize();
+                        Path baseTempPath = tempLibDir.toPath().toAbsolutePath().normalize();
+                        if (!tempJarPath.startsWith(baseTempPath)) {
+                            continue; // Zip Slip protection
+                        }
                         tempJar.deleteOnExit();
                         if (!tempJar.exists()) {
                             try (InputStream is = zip.getInputStream(entry);
-                                 OutputStream os = Files.newOutputStream(tempJar.toPath())) {
+                                 OutputStream os = Files.newOutputStream(tempJarPath)) {
                                 is.transferTo(os);
                             }
                         }
@@ -138,6 +147,8 @@ public class AuxiliaryClasspathResolver {
             factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
             factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
             factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
             DocumentBuilder builder = factory.newDocumentBuilder();
             Document doc = builder.parse(pomStream);
             doc.getDocumentElement().normalize();

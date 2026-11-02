@@ -453,6 +453,10 @@ public class ZipBytecodeLoader {
                 return res;
             }
 
+            if (entry.getSize() > 10 * 1024 * 1024) {
+                return String.format("// [Resource '%s' is too large (%d bytes). Please specify line offset/limit or use extract_archive to save to disk.]", normalized, entry.getSize());
+            }
+
             String fullText;
             try (InputStream is = zipFile.getInputStream(entry)) {
                 fullText = new String(is.readAllBytes(), StandardCharsets.UTF_8);

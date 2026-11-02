@@ -107,12 +107,21 @@ public class StackTraceContextExtractor {
         if (matchIdx >= 0) {
             int start = Math.max(0, matchIdx - radius);
             int end = Math.min(lines.length, matchIdx + radius + 1);
+            boolean isFromSources = !decompiled.contains("Decompiled with CFR");
 
             for (int i = start; i < end; i++) {
                 if (i == matchIdx) {
                     sb.append(String.format(" %5d: >>> %s\n", targetLine, lines[i]));
                 } else {
-                    int lineNum = targetLine + (i - matchIdx);
+                    int lineNum;
+                    Integer extracted = extractLineNumberComment(lines[i]);
+                    if (extracted != null) {
+                        lineNum = extracted;
+                    } else if (isFromSources) {
+                        lineNum = i + 1;
+                    } else {
+                        lineNum = targetLine + (i - matchIdx);
+                    }
                     sb.append(String.format(" %5d:     %s\n", lineNum, lines[i]));
                 }
             }
@@ -126,5 +135,16 @@ public class StackTraceContextExtractor {
         }
 
         return new StackTraceSnippetResult(className, discoveredMethod.get(), targetLine, sb.toString());
+    }
+
+    private static Integer extractLineNumberComment(String line) {
+        if (line == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("/\\*\\s*[Ll]ine\\s*(\\d+)\\s*\\*/").matcher(line);
+        if (m.find()) {
+            try {
+                return Integer.parseInt(m.group(1));
+            } catch (NumberFormatException ignored) {}
+        }
+        return null;
     }
 }

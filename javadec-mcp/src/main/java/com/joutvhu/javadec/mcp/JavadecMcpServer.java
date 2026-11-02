@@ -70,26 +70,41 @@ public class JavadecMcpServer {
         return null;
     }
 
-    static void validateTarget(String target) throws IOException {
+    record TargetSpec(File jar, String classPath, File standaloneFile) {
+        public boolean isArchive() {
+            return jar != null;
+        }
+    }
+
+    static TargetSpec parseTarget(String target) throws IOException {
         if (target == null || target.isBlank()) {
             throw new IllegalArgumentException("Either 'target' (e.g. 'library.jar!com/example/MyClass.class') or ('jarPath' and 'classPath') must be specified.");
+        }
+        File f = PathUtil.resolveFile(target);
+        if (f != null && f.exists() && !isArchiveFile(target)) {
+            return new TargetSpec(null, null, f);
         }
         int bangIdx = target.lastIndexOf('!');
         if (bangIdx >= 0) {
             String jarPath = target.substring(0, bangIdx);
+            String classPath = target.substring(bangIdx + 1);
             File jar = PathUtil.resolveFile(jarPath);
             if (!jar.exists()) {
                 throw new FileNotFoundException("Archive file not found: " + jarPath);
             }
-        } else {
-            File f = PathUtil.resolveFile(target);
-            if (!f.exists()) {
-                throw new FileNotFoundException("File not found: " + target);
-            }
-            if (isArchiveFile(target)) {
-                throw new IllegalArgumentException("Target '" + target + "' is an archive. Please specify a class inside the archive (e.g. target: '" + target + "!com/example/MyClass.class' or supply 'classPath').");
-            }
+            return new TargetSpec(jar, classPath, null);
         }
+        if (f == null || !f.exists()) {
+            throw new FileNotFoundException("File not found: " + target);
+        }
+        if (isArchiveFile(target)) {
+            throw new IllegalArgumentException("Target '" + target + "' is an archive. Please specify a class inside the archive (e.g. target: '" + target + "!com/example/MyClass.class' or supply 'classPath').");
+        }
+        return new TargetSpec(null, null, f);
+    }
+
+    static void validateTarget(String target) throws IOException {
+        parseTarget(target);
     }
 
     public static void main(String[] args) {
@@ -325,17 +340,13 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 ClassOutline outline;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    outline = DECOMPILER.getArchiveClassOutline(jar, target.substring(bangIdx + 1));
+                                if (target.isArchive()) {
+                                    outline = DECOMPILER.getArchiveClassOutline(target.jar(), target.classPath());
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    outline = DECOMPILER.getClassOutline(file);
+                                    outline = DECOMPILER.getClassOutline(target.standaloneFile());
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(outline.toSkeletonSource())))
@@ -375,8 +386,7 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
@@ -397,13 +407,10 @@ public class JavadecMcpServer {
                                         .build();
 
                                 String result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.decompileArchiveClass(jar, target.substring(bangIdx + 1), options);
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.decompileArchiveClass(target.jar(), target.classPath(), options);
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    result = DECOMPILER.decompileFile(file, options);
+                                    result = DECOMPILER.decompileFile(target.standaloneFile(), options);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
@@ -445,8 +452,7 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
@@ -468,13 +474,10 @@ public class JavadecMcpServer {
                                         .build();
 
                                 String result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.decompileArchiveMethod(jar, target.substring(bangIdx + 1), methodName, options);
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.decompileArchiveMethod(target.jar(), target.classPath(), methodName, options);
                                 } else {
-                                    File f = PathUtil.resolveFile(target);
-                                    result = DECOMPILER.decompileFileMethod(f, methodName, options);
+                                    result = DECOMPILER.decompileFileMethod(target.standaloneFile(), methodName, options);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
@@ -510,21 +513,17 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
 
                                 String result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.disassembleArchiveClass(jar, target.substring(bangIdx + 1), methodName, lineOffset, lineLimit);
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.disassembleArchiveClass(target.jar(), target.classPath(), methodName, lineOffset, lineLimit);
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    result = DECOMPILER.disassembleFile(file, methodName, lineOffset, lineLimit);
+                                    result = DECOMPILER.disassembleFile(target.standaloneFile(), methodName, lineOffset, lineLimit);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
@@ -602,20 +601,16 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer limit = request.arguments().get("limit") instanceof Number n ? n.intValue() : 200;
 
                                 CalleeResult result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.getArchiveCallees(jar, target.substring(bangIdx + 1), methodName, limit);
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.getArchiveCallees(target.jar(), target.classPath(), methodName, limit);
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    byte[] bytes = Files.readAllBytes(target.standaloneFile().toPath());
                                     result = DECOMPILER.getCallees(bytes, methodName, limit);
                                 }
                                 return McpSchema.CallToolResult.builder()
@@ -651,17 +646,13 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 DependencyAnalysisResult result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.analyzeArchiveDependencies(jar, target.substring(bangIdx + 1));
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.analyzeArchiveDependencies(target.jar(), target.classPath());
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    byte[] bytes = Files.readAllBytes(target.standaloneFile().toPath());
                                     result = DECOMPILER.analyzeDependencies(bytes);
                                 }
                                 return McpSchema.CallToolResult.builder()
@@ -740,8 +731,7 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 Integer lineNum = request.arguments().get("lineNumber") instanceof Number n ? n.intValue() : -1;
                                 if (lineNum <= 0) {
@@ -750,13 +740,10 @@ public class JavadecMcpServer {
                                 Integer contextLines = request.arguments().get("contextLines") instanceof Number n ? n.intValue() : 3;
 
                                 StackTraceSnippetResult snippet;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    snippet = DECOMPILER.inspectStackTraceLine(jar, target.substring(bangIdx + 1), lineNum, contextLines);
+                                if (target.isArchive()) {
+                                    snippet = DECOMPILER.inspectStackTraceLine(target.jar(), target.classPath(), lineNum, contextLines);
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    snippet = DECOMPILER.inspectStackTraceLine(null, file.getPath(), lineNum, contextLines);
+                                    snippet = DECOMPILER.inspectStackTraceLine(null, target.standaloneFile().getPath(), lineNum, contextLines);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(snippet.snippet())))
@@ -941,18 +928,14 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 String methodName = (String) request.arguments().get("methodName");
                                 ClassMetricsResult result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.extractArchiveMetrics(jar, target.substring(bangIdx + 1), methodName);
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.extractArchiveMetrics(target.jar(), target.classPath(), methodName);
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    byte[] bytes = Files.readAllBytes(target.standaloneFile().toPath());
                                     result = DECOMPILER.extractMetrics(bytes, methodName);
                                 }
                                 return McpSchema.CallToolResult.builder()
@@ -986,18 +969,14 @@ public class JavadecMcpServer {
                                 .build(),
                         (exchange, request) -> {
                             try {
-                                String target = resolveTarget(request.arguments());
-                                validateTarget(target);
+                                TargetSpec target = parseTarget(resolveTarget(request.arguments()));
 
                                 ClassHierarchyResult result;
-                                int bangIdx = target.lastIndexOf('!');
-                                if (bangIdx >= 0) {
-                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
-                                    result = DECOMPILER.getArchiveClassHierarchy(jar, target.substring(bangIdx + 1));
+                                if (target.isArchive()) {
+                                    result = DECOMPILER.getArchiveClassHierarchy(target.jar(), target.classPath());
                                 } else {
-                                    File file = PathUtil.resolveFile(target);
-                                    byte[] bytes = Files.readAllBytes(file.toPath());
-                                    result = DECOMPILER.getClassHierarchy(bytes, file.getName());
+                                    byte[] bytes = Files.readAllBytes(target.standaloneFile().toPath());
+                                    result = DECOMPILER.getClassHierarchy(bytes, target.standaloneFile().getName());
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result.formattedHierarchy())))

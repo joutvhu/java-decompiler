@@ -23,6 +23,14 @@ public class MavenCoordinateResolverTest {
         assertFalse(MavenCoordinateResolver.isMavenCoordinate("app.jar"));
         assertFalse(MavenCoordinateResolver.isMavenCoordinate(null));
         assertFalse(MavenCoordinateResolver.isMavenCoordinate(""));
+        assertFalse(MavenCoordinateResolver.isMavenCoordinate("org.example:..:1.0"));
+        assertFalse(MavenCoordinateResolver.isMavenCoordinate("..:..:.."));
+    }
+
+    @Test
+    public void testInvalidCoordinatesThrowException() {
+        assertThrows(IllegalArgumentException.class, () -> MavenCoordinateResolver.resolveCoordinate("invalid-coord"));
+        assertThrows(IllegalArgumentException.class, () -> MavenCoordinateResolver.resolveCoordinate("org.example:..:1.0"));
     }
 
     @Test

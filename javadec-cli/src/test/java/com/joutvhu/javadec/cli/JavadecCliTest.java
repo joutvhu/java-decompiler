@@ -239,6 +239,37 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testStandaloneFileInDirectoryWithExclamationMark() throws Exception {
+        java.nio.file.Path bangDir = java.nio.file.Files.createTempDirectory("javadec-bang!dir-");
+        File bangClass = bangDir.resolve("Standalone.class").toFile();
+        bangClass.deleteOnExit();
+
+        String source = """
+                package com.joutvhu.javadec.test;
+                public class Standalone {
+                    public void hello() {}
+                }
+                """;
+        javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        File srcDir = java.nio.file.Files.createTempDirectory("javadec-src-").toFile();
+        File javaFile = new File(srcDir, "com/joutvhu/javadec/test/Standalone.java");
+        javaFile.getParentFile().mkdirs();
+        java.nio.file.Files.writeString(javaFile.toPath(), source);
+
+        File outDir = java.nio.file.Files.createTempDirectory("javadec-cls-").toFile();
+        compiler.run(null, null, null, "-parameters", "-d", outDir.getAbsolutePath(), javaFile.getAbsolutePath());
+        File compiled = new File(outDir, "com/joutvhu/javadec/test/Standalone.class");
+        java.nio.file.Files.copy(compiled.toPath(), bangClass.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("view", bangClass.getAbsolutePath());
+        assertEquals(0, exitCode);
+
+        int outlineCode = cmd.execute("outline", bangClass.getAbsolutePath());
+        assertEquals(0, outlineCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
