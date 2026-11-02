@@ -369,25 +369,6 @@ public class ZipBytecodeLoader {
             }
         }
 
-        // Binary extension check to protect AI context window
-        String lower = normalized.toLowerCase();
-        for (String ext : BINARY_EXTENSIONS) {
-            if (lower.endsWith(ext)) {
-                long size = -1;
-                try (ZipFile zipFile = new ZipFile(archiveFile)) {
-                    for (String prefix : ARCHIVE_CLASS_PREFIXES) {
-                        ZipEntry entry = zipFile.getEntry(prefix + normalized);
-                        if (entry != null) {
-                            size = entry.getSize();
-                            break;
-                        }
-                    }
-                } catch (Exception ignored) {}
-                String sizeStr = size >= 0 ? " (" + size + " bytes)" : "";
-                return String.format("// [Binary asset: %s%s. Not a text resource. Use extract_archive to save to disk.]", normalized, sizeStr);
-            }
-        }
-
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             // 1. Direct and prefix lookups
             ZipEntry entry = null;
@@ -417,6 +398,16 @@ public class ZipBytecodeLoader {
                 throw new IOException("Resource not found: '" + resourcePath + "' in archive: " + archiveFile.getAbsolutePath());
             }
 
+            // Binary extension check to protect AI context window
+            String lower = normalized.toLowerCase();
+            for (String ext : BINARY_EXTENSIONS) {
+                if (lower.endsWith(ext) || entry.getName().toLowerCase().endsWith(ext)) {
+                    long size = entry.getSize();
+                    String sizeStr = size >= 0 ? " (" + size + " bytes)" : "";
+                    return String.format("// [Binary asset: %s%s. Not a text resource. Use extract_archive to save to disk.]", normalized, sizeStr);
+                }
+            }
+
             if (lineOffset != null || lineLimit != null) {
                 int start = (lineOffset != null && lineOffset > 0) ? lineOffset : 1;
                 int maxCount = (lineLimit != null && lineLimit > 0) ? lineLimit : Integer.MAX_VALUE;
@@ -443,7 +434,7 @@ public class ZipBytecodeLoader {
                         }
                     }
                 }
-                if (currentLine < start) {
+                if (lineOffset != null && currentLine < start) {
                     return "// Offset line " + lineOffset + " exceeds total line count (" + currentLine + ").";
                 }
                 String res = sb.toString();

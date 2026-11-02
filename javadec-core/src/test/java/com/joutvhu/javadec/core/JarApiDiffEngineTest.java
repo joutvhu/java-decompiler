@@ -21,6 +21,7 @@ public class JarApiDiffEngineTest {
         String v1Src = """
                 package com.example;
                 public class Service {
+                    public int status = 1;
                     public void oldMethod() {}
                     public int calculate(int x) { return x; }
                 }
@@ -29,6 +30,7 @@ public class JarApiDiffEngineTest {
         String v2Src = """
                 package com.example;
                 public class Service {
+                    public String status = "active";
                     public int calculate(int x) { return x * 2; }
                     public void newMethod() {}
                 }
@@ -62,10 +64,12 @@ public class JarApiDiffEngineTest {
         assertNotNull(diff);
         assertTrue(diff.addedCount() >= 2); // newMethod + NewClass
         assertTrue(diff.removedCount() >= 1); // oldMethod
+        assertTrue(diff.modifiedCount() >= 1); // status field modified
 
         String report = diff.formattedReport();
         assertTrue(report.contains("[REMOVED] com.example.Service.oldMethod"));
         assertTrue(report.contains("[ADDED]   com.example.Service.newMethod"));
         assertTrue(report.contains("[ADDED]   com.example.NewClass"));
+        assertTrue(report.contains("[CHANGED] com.example.Service.status"));
     }
 }

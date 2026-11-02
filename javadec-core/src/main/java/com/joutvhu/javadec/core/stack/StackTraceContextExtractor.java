@@ -76,13 +76,12 @@ public class StackTraceContextExtractor {
         String[] lines = decompiled.split("\r?\n", -1);
         int matchIdx = -1;
         String lineTargetPattern1 = "/* line " + targetLine + " */";
-        String lineTargetPattern2 = "/* " + targetLine + " */";
         String lineTargetPattern3 = "/* Line " + targetLine + " */";
 
         for (int i = 0; i < lines.length; i++) {
             String l = lines[i];
-            if (l.contains(lineTargetPattern1) || l.contains(lineTargetPattern2) || l.contains(lineTargetPattern3)
-                    || l.matches(".*\\/\\*\\s*line\\s*" + targetLine + "\\s*\\*\\/.*")) {
+            if (l.contains(lineTargetPattern1) || l.contains(lineTargetPattern3)
+                    || l.matches(".*\\/\\*\\s*[Ll]ine\\s*" + targetLine + "\\s*\\*\\/.*")) {
                 matchIdx = i;
                 break;
             }
@@ -93,11 +92,28 @@ public class StackTraceContextExtractor {
             matchIdx = targetLine - 1;
         }
 
+        String className = discoveredClassName.get() != null
+                ? discoveredClassName.get()
+                : classPath.replace('\\', '/').replaceAll("^/+", "").replaceAll("\\.class$", "").replace('/', '.');
+
         // If still not matched, try matching discovered method declaration
         if (matchIdx < 0 && discoveredMethod.get() != null) {
             String mName = discoveredMethod.get();
+            boolean isInit = "<init>".equals(mName);
+            boolean isClinit = "<clinit>".equals(mName);
+            String simpleName = className.contains(".") ? className.substring(className.lastIndexOf('.') + 1) : className;
+
             for (int i = 0; i < lines.length; i++) {
-                if (lines[i].contains(" " + mName + "(") || lines[i].contains(" " + mName + " (")) {
+                String line = lines[i];
+                boolean matched;
+                if (isInit) {
+                    matched = line.contains(" " + simpleName + "(") || line.contains(" " + simpleName + " (");
+                } else if (isClinit) {
+                    matched = line.contains("static {") || line.contains("static{");
+                } else {
+                    matched = line.contains(" " + mName + "(") || line.contains(" " + mName + " (");
+                }
+                if (matched) {
                     matchIdx = i;
                     break;
                 }
@@ -105,9 +121,6 @@ public class StackTraceContextExtractor {
         }
 
         StringBuilder sb = new StringBuilder();
-        String className = discoveredClassName.get() != null
-                ? discoveredClassName.get()
-                : classPath.replace('\\', '/').replaceAll("^/+", "").replaceAll("\\.class$", "").replace('/', '.');
         sb.append("// Context for ").append(className);
         if (discoveredMethod.get() != null) {
             sb.append(".").append(discoveredMethod.get());
@@ -132,7 +145,11 @@ public class StackTraceContextExtractor {
                     } else {
                         lineNum = targetLine + (i - matchIdx);
                     }
-                    sb.append(String.format(" %5d:     %s\n", lineNum, lines[i]));
+                    if (lineNum > 0) {
+                        sb.append(String.format(" %5d:     %s\n", lineNum, lines[i]));
+                    } else {
+                        sb.append(String.format("      :     %s\n", lines[i]));
+                    }
                 }
             }
         } else {

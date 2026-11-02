@@ -166,6 +166,10 @@ public class JavadecCliTest {
         CommandLine cmd = new CommandLine(new JavadecCli());
         int exitCode = cmd.execute("trace", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class", "4");
         assertEquals(0, exitCode);
+
+        // Test 3-argument syntax: javadec trace <jar> <classInJar> <line>
+        int exitCode3Arg = cmd.execute("trace", refJar.getAbsolutePath(), "com/joutvhu/javadec/test/SampleService.class", "4");
+        assertEquals(0, exitCode3Arg);
     }
 
     @Test
@@ -310,6 +314,10 @@ public class JavadecCliTest {
         // Passing JAR directly to hierarchy without a class must fail gracefully with exit code 1
         int code6 = cmd.execute("hierarchy", refJar.getAbsolutePath());
         assertEquals(1, code6);
+
+        // Passing JAR directly to trace without a class must fail gracefully with exit code 1
+        int code7 = cmd.execute("trace", refJar.getAbsolutePath(), "4");
+        assertEquals(1, code7);
     }
 
     @Test

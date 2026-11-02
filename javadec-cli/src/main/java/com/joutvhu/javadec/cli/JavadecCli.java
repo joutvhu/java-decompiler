@@ -544,8 +544,11 @@ public class JavadecCli implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> (or GAV)")
         private String target;
 
-        @Parameters(index = "1", arity = "0..1", description = "Line number (or specify target as <path>:<line>)")
-        private String lineArg;
+        @Parameters(index = "1", arity = "0..1", description = "Class path inside archive, or line number (if specifying target as <path>:<line>)")
+        private String secondArg;
+
+        @Parameters(index = "2", arity = "0..1", description = "Line number when second argument is a class path")
+        private String thirdArg;
 
         @Option(names = {"-C", "--context"}, description = "Number of surrounding context lines to display (default: 3)")
         private Integer contextLines;
@@ -556,12 +559,18 @@ public class JavadecCli implements Callable<Integer> {
             int targetLine = -1;
 
             try {
-                if (lineArg != null && !lineArg.isBlank()) {
-                    if (lineArg.contains(":")) {
-                        resolvedTarget = target + "!" + lineArg.substring(0, lineArg.indexOf(':'));
-                        targetLine = Integer.parseInt(lineArg.substring(lineArg.indexOf(':') + 1));
+                if (thirdArg != null && !thirdArg.isBlank()) {
+                    // 3-arg syntax: javadec trace <archive> <classInJar> <line>
+                    resolvedTarget = target + "!" + secondArg.trim();
+                    targetLine = Integer.parseInt(thirdArg.trim());
+                } else if (secondArg != null && !secondArg.isBlank()) {
+                    if (secondArg.contains(":")) {
+                        resolvedTarget = target + "!" + secondArg.substring(0, secondArg.indexOf(':'));
+                        targetLine = Integer.parseInt(secondArg.substring(secondArg.indexOf(':') + 1));
+                    } else if (secondArg.trim().matches("\\d+")) {
+                        targetLine = Integer.parseInt(secondArg.trim());
                     } else {
-                        targetLine = Integer.parseInt(lineArg);
+                        resolvedTarget = target + "!" + secondArg.trim();
                     }
                 } else if (target != null && target.contains(":")) {
                     int colonIdx = target.lastIndexOf(':');
@@ -592,6 +601,11 @@ public class JavadecCli implements Callable<Integer> {
                 File file = spec.standaloneFile();
                 if (file == null || !file.exists()) {
                     System.err.println("Error: File not found: " + (file != null ? file.getPath() : resolvedTarget));
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec trace " + target + " com/example/MyClass.class " + targetLine);
                     return 1;
                 }
                 snippet = decompiler.inspectStackTraceLine(null, file.getPath(), targetLine, contextLines);

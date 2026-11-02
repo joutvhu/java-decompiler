@@ -158,4 +158,31 @@ public class ZipBytecodeLoaderTest {
         String result = ZipBytecodeLoader.readResourceText(jar, "static/logo.png");
         assertTrue(result.contains("5 bytes"));
     }
+
+    @Test
+    public void testEmptyResourcePagination(@TempDir Path tempDir) throws Exception {
+        File jar = tempDir.resolve("empty-res.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            zos.putNextEntry(new ZipEntry("empty.txt"));
+            zos.write(new byte[0]);
+            zos.closeEntry();
+        }
+
+        String result = ZipBytecodeLoader.readResourceText(jar, "empty.txt", null, 10);
+        assertEquals("", result);
+    }
+
+    @Test
+    public void testMissingBinaryAssetThrowsNotFound(@TempDir Path tempDir) throws Exception {
+        File jar = tempDir.resolve("empty.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            zos.putNextEntry(new ZipEntry("test.txt"));
+            zos.write("hello".getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+
+        assertThrows(IOException.class, () -> {
+            ZipBytecodeLoader.readResourceText(jar, "missing.png");
+        });
+    }
 }

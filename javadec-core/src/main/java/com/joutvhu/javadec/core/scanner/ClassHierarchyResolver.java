@@ -67,6 +67,23 @@ public class ClassHierarchyResolver {
             }
         }
 
+        // Recursively resolve super-interfaces of all collected interfaces
+        Queue<String> ifaceQueue = new ArrayDeque<>(allInterfaces.keySet());
+        Set<String> visitedIfaces = new HashSet<>(allInterfaces.keySet());
+        while (!ifaceQueue.isEmpty()) {
+            String iface = ifaceQueue.poll();
+            ClassOutline ifaceOutline = findOutline(iface, archiveFile, auxJars);
+            if (ifaceOutline != null && ifaceOutline.interfaces() != null) {
+                for (String parentIface : ifaceOutline.interfaces()) {
+                    String dottedParent = parentIface.replace('/', '.');
+                    if (visitedIfaces.add(dottedParent)) {
+                        allInterfaces.putIfAbsent(dottedParent, iface);
+                        ifaceQueue.add(dottedParent);
+                    }
+                }
+            }
+        }
+
         // Format ASCII tree
         StringBuilder sb = new StringBuilder();
         sb.append("Class Hierarchy for ").append(currentClass).append(":\n\n");

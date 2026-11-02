@@ -75,6 +75,10 @@ public class JarApiDiffEngine {
                     if (!f2Map.containsKey(fKey)) {
                         diffs.add(new DiffItem(DiffType.FIELD_REMOVED, className + "." + fKey, "Field removed", true));
                         removed++;
+                    } else if (!Objects.equals(fEntry.getValue(), f2Map.get(fKey))) {
+                        diffs.add(new DiffItem(DiffType.FIELD_MODIFIED, className + "." + fKey,
+                                "Changed field type or modifiers: " + fEntry.getValue() + " -> " + f2Map.get(fKey), true));
+                        modified++;
                     }
                 }
 

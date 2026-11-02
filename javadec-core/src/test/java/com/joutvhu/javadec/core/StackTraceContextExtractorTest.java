@@ -47,5 +47,38 @@ public class StackTraceContextExtractorTest {
         assertTrue(res.snippet().contains("PaymentService"));
         assertEquals("charge", res.methodName());
         assertTrue(res.snippet().contains(">>>"), "Snippet should contain highlighted marker >>>");
+        assertFalse(res.snippet().contains("-1:"), "Should not contain negative line numbers");
+        assertFalse(res.snippet().contains("-2:"), "Should not contain negative line numbers");
+    }
+
+    @Test
+    public void testInspectConstructorStackTraceSnippet(@TempDir Path tempDir) throws Exception {
+        String src = """
+                package com.example;
+                public class InitService {
+                    public InitService(int code) {
+                        if (code < 0) {
+                            throw new IllegalStateException("invalid code");
+                        }
+                    }
+                }
+                """;
+
+        Map<String, byte[]> classes = TestCompiler.compile("com.example.InitService", src);
+        File jar = tempDir.resolve("init-trace.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(jar))) {
+            for (var entry : classes.entrySet()) {
+                zos.putNextEntry(new ZipEntry(entry.getKey().replace('.', '/') + ".class"));
+                zos.write(entry.getValue());
+                zos.closeEntry();
+            }
+        }
+
+        JavaDecompiler decompiler = new JavaDecompiler();
+        StackTraceSnippetResult res = decompiler.inspectStackTraceLine(jar, "com/example/InitService.class", 5, 2);
+        assertNotNull(res);
+        assertEquals("<init>", res.methodName());
+        assertTrue(res.snippet().contains(">>>"));
+        assertTrue(res.snippet().contains("InitService"));
     }
 }
