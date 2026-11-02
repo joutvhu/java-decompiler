@@ -51,7 +51,9 @@ public class AsmClassOutlineExtractor {
 
         boolean isInterface = (classNode.access & Opcodes.ACC_INTERFACE) != 0;
         String classKind = "class";
-        if (isInterface) {
+        if (internalName.endsWith("/package-info") || internalName.equals("package-info")) {
+            classKind = "package-info";
+        } else if (isInterface) {
             classKind = (classNode.access & Opcodes.ACC_ANNOTATION) != 0 ? "@interface" : "interface";
         } else if ((classNode.access & Opcodes.ACC_ENUM) != 0) {
             classKind = "enum";

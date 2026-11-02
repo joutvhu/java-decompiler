@@ -8,6 +8,8 @@ import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.*;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
 import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
+import com.joutvhu.javadec.core.scanner.BytecodeMetricsExtractor;
+import com.joutvhu.javadec.core.scanner.BytecodeSecurityAuditor;
 import com.joutvhu.javadec.core.scanner.CalleeScanner;
 import com.joutvhu.javadec.core.scanner.ClassDependencyAnalyzer;
 import com.joutvhu.javadec.core.scanner.ConstantStringExtractor;
@@ -44,10 +46,14 @@ public class JavaDecompiler {
     }
 
     /**
-     * Lists class entries inside an archive (jar/zip).
+     * Lists class entries inside an archive (jar/zip) with optional substring and annotation filters.
      */
+    public List<String> listArchiveClasses(File archiveFile, String filterPattern, String annotationFilter) throws IOException {
+        return ZipBytecodeLoader.listClasses(archiveFile, filterPattern, annotationFilter);
+    }
+
     public List<String> listArchiveClasses(File archiveFile, String filterPattern) throws IOException {
-        return ZipBytecodeLoader.listClasses(archiveFile, filterPattern);
+        return listArchiveClasses(archiveFile, filterPattern, null);
     }
 
     /**
@@ -156,6 +162,33 @@ public class JavaDecompiler {
         } catch (IOException e) {
             return "// No module-info.class found in archive: " + archiveFile.getName();
         }
+    }
+
+    /**
+     * Audits an archive for bytecode security vulnerabilities and risky patterns (Command injection, deserialization, etc.)
+     */
+    public SecurityAuditResult auditSecurity(File archiveFile, SecurityFindingItem.Severity minSeverity, String pathFilter) throws IOException {
+        return BytecodeSecurityAuditor.auditArchive(archiveFile, minSeverity, pathFilter);
+    }
+
+    public SecurityAuditResult auditSecurity(File archiveFile) throws IOException {
+        return auditSecurity(archiveFile, null, null);
+    }
+
+    public SecurityAuditResult auditClassSecurity(byte[] bytecode, String className, SecurityFindingItem.Severity minSeverity) {
+        return BytecodeSecurityAuditor.auditClass(bytecode, className, minSeverity);
+    }
+
+    /**
+     * Extracts JVM bytecode technical metrics (instruction count, maxStack, maxLocals, tryCatch blocks) for a class.
+     */
+    public ClassMetricsResult extractMetrics(byte[] bytecode, String filterMethod) {
+        return BytecodeMetricsExtractor.extract(bytecode, filterMethod);
+    }
+
+    public ClassMetricsResult extractArchiveMetrics(File archiveFile, String classPath, String filterMethod) throws IOException {
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
+        return extractMetrics(bytes, filterMethod);
     }
 
     /**

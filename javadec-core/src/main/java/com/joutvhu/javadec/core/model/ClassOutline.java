@@ -88,6 +88,17 @@ public record ClassOutline(
             return sb.toString();
         }
 
+        // Render package-info e.g. @Annotation package com.example;
+        if ("package-info".equals(classKind)) {
+            for (String ann : annotations) {
+                sb.append("@").append(ann).append("\n");
+            }
+            if (packageName != null && !packageName.isEmpty()) {
+                sb.append("package ").append(packageName).append(";\n");
+            }
+            return sb.toString();
+        }
+
         if (packageName != null && !packageName.isEmpty()) {
             sb.append("package ").append(packageName).append(";\n\n");
         }

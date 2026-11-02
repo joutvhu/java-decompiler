@@ -207,4 +207,24 @@ public class JavadecMcpServerTest {
             assertNotNull(res);
         });
     }
+
+    @Test
+    public void testSecurityAuditExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.auditSecurity(refJar, null, null);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
+
+    @Test
+    public void testInspectMetricsExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.extractArchiveMetrics(refJar, "com/joutvhu/javadec/test/SampleService.class", "main");
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
 }

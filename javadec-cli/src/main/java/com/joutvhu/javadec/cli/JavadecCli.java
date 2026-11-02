@@ -38,6 +38,8 @@ import java.util.concurrent.Callable;
                 JavadecCli.DiffCommand.class,
                 JavadecCli.ManifestCommand.class,
                 JavadecCli.ModuleCommand.class,
+                JavadecCli.AuditCommand.class,
+                JavadecCli.MetricsCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -100,6 +102,9 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"-p", "--pattern"}, description = "Filter class names by substring or package")
         private String pattern;
 
+        @Option(names = {"-a", "--annotation"}, description = "Filter classes by annotation (e.g. @RestController, @Entity, @Service)")
+        private String annotation;
+
         @Override
         public Integer call() throws Exception {
             File jar = PathUtil.resolveFile(jarFile);
@@ -108,7 +113,7 @@ public class JavadecCli implements Callable<Integer> {
                 return 1;
             }
             JavaDecompiler decompiler = new JavaDecompiler();
-            List<String> classes = decompiler.listArchiveClasses(jar, pattern);
+            List<String> classes = decompiler.listArchiveClasses(jar, pattern, annotation);
             for (String cls : classes) {
                 System.out.println(cls);
             }
@@ -625,6 +630,83 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             String moduleInfo = decompiler.inspectModule(jar);
             System.out.println(moduleInfo);
+            return 0;
+        }
+    }
+
+    @Command(name = "audit", aliases = {"security", "check"}, description = "Audit archive or class bytecode for security vulnerabilities and risky anti-patterns")
+    static class AuditCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar, .class, or Maven GAV")
+        private String target;
+
+        @Option(names = {"--min-severity"}, description = "Filter findings by minimum severity: CRITICAL, HIGH, MEDIUM, LOW")
+        private SecurityFindingItem.Severity minSeverity;
+
+        @Option(names = {"-p", "--path"}, description = "Optional package or path filter inside archive")
+        private String pathFilter;
+
+        @Override
+        public Integer call() throws Exception {
+            File file = PathUtil.resolveFile(target);
+            if (!file.exists()) {
+                System.err.println("Error: File not found: " + file.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            SecurityAuditResult result;
+            if (isArchiveFile(file)) {
+                result = decompiler.auditSecurity(file, minSeverity, pathFilter);
+            } else {
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.auditClassSecurity(bytes, file.getName(), minSeverity);
+            }
+
+            System.out.println(result.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "metrics", aliases = {"stats"}, description = "Inspect JVM technical bytecode metrics (instructions count, maxStack, maxLocals, tryCatch blocks)")
+    static class MetricsCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> or GAV")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
+        @Option(names = {"-m", "--method"}, description = "Optional method name to inspect exclusively")
+        private String method;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ClassMetricsResult result;
+
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                result = decompiler.extractArchiveMetrics(jar, resolvedTarget.substring(bangIdx + 1), method);
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.extractMetrics(bytes, method);
+            }
+
+            System.out.println(result.formattedSummary());
             return 0;
         }
     }

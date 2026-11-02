@@ -70,6 +70,8 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `jar_diff(jar1, jar2, packageFilter?, breakingOnly?)` — compare binary API differences and breaking changes between two JARs or versions
 - `inspect_manifest(jarPath)` — structured packaging metadata, main-class, build JDK, and SPI services
 - `inspect_module(jarPath)` — extract JPMS module declaration (requires, exports, opens, uses, provides)
+- `security_audit(jarPath, minSeverity?, pathFilter?)` — audit archive or class bytecode for security vulnerabilities and risky patterns
+- `inspect_metrics(target, methodName?)` — inspect JVM bytecode technical metrics (instruction count, maxStack, maxLocals, try-catch)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
 - `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
@@ -77,7 +79,7 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 If MCP tools are not registered, execute CLI commands in the terminal using `javadec` (or `npx -y javadec`):
 - `javadec tree <jarPath> [--path <subPath>] [--depth <n>]`
 - `javadec resource <jarPath> <resourcePath> [--offset <n>] [--limit <n>]`
-- `javadec list <jarPath> -p <pattern>`
+- `javadec list <jarPath> [-p <pattern>] [-a <annotation>]`
 - `javadec outline <target>`
 - `javadec find <jarPath> <target> [-l <limit>] [-p <filter>]` (aliases: `refs`, `usages`)
 - `javadec callees <target> [-m <method>] [-l <limit>]` (aliases: `calls`, `outgoing`)
@@ -87,6 +89,8 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec diff <jar1> <jar2> [-p <filter>] [--breaking-only]` (alias: `delta`)
 - `javadec manifest <archiveOrGav>`
 - `javadec module <archiveOrGav>` (aliases: `jpms`)
+- `javadec audit <archiveOrClass> [--min-severity <level>] [-p <filter>]` (aliases: `security`, `check`)
+- `javadec metrics <target> [-m <method>]` (aliases: `stats`)
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
 - `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
 - `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)

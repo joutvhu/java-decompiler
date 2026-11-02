@@ -28,6 +28,10 @@ public class ZipBytecodeLoader {
     );
 
     public static List<String> listClasses(File archiveFile, String filterPattern) throws IOException {
+        return listClasses(archiveFile, filterPattern, null);
+    }
+
+    public static List<String> listClasses(File archiveFile, String filterPattern, String annotationFilter) throws IOException {
         List<String> classes = new ArrayList<>();
 
         String cleanFilter = filterPattern != null ? filterPattern.trim().replaceAll("^\\*+", "").replaceAll("\\*+$", "") : null;
@@ -36,6 +40,11 @@ public class ZipBytecodeLoader {
 
         String lowerSlashFilter = slashFilter != null ? slashFilter.toLowerCase() : null;
         String lowerDotFilter = dotFilter != null ? dotFilter.toLowerCase() : null;
+
+        String cleanAnn = (annotationFilter != null && !annotationFilter.isBlank())
+                ? annotationFilter.trim().replaceAll("^@+", "").replace('/', '.')
+                : null;
+        String simpleAnn = cleanAnn != null ? (cleanAnn.contains(".") ? cleanAnn.substring(cleanAnn.lastIndexOf('.') + 1) : cleanAnn) : null;
 
         try (ZipFile zipFile = new ZipFile(archiveFile)) {
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -52,22 +61,95 @@ public class ZipBytecodeLoader {
                     }
 
                     String className = cleanName.substring(0, cleanName.length() - 6);
-                    if (cleanFilter == null || cleanFilter.isEmpty()) {
-                        classes.add(className);
-                    } else {
+                    boolean nameMatches = true;
+                    if (cleanFilter != null && !cleanFilter.isEmpty()) {
                         String dottedName = className.replace('/', '.');
                         String lowerClass = className.toLowerCase();
                         String lowerDotted = dottedName.toLowerCase();
                         String lowerRaw = name.toLowerCase();
 
-                        if (lowerClass.contains(lowerSlashFilter) || lowerDotted.contains(lowerDotFilter) || lowerRaw.contains(lowerSlashFilter)) {
-                            classes.add(className);
+                        nameMatches = (lowerClass.contains(lowerSlashFilter) || lowerDotted.contains(lowerDotFilter) || lowerRaw.contains(lowerSlashFilter));
+                    }
+
+                    if (!nameMatches) continue;
+
+                    // Filter by annotation if requested
+                    if (cleanAnn != null) {
+                        try (InputStream is = zipFile.getInputStream(entry)) {
+                            byte[] bytes = is.readAllBytes();
+                            if (!classHasAnnotation(bytes, cleanAnn, simpleAnn)) {
+                                continue;
+                            }
+                        } catch (Exception ignored) {
+                            continue;
                         }
                     }
+
+                    classes.add(className);
                 }
             }
         }
         return classes;
+    }
+
+    private static boolean classHasAnnotation(byte[] bytecode, String fullAnn, String simpleAnn) {
+        if (bytecode == null || bytecode.length < 8) return false;
+        // Fast pre-check: constant pool must contain the annotation simple name
+        String content = new String(bytecode, StandardCharsets.ISO_8859_1);
+        if (!content.contains(simpleAnn)) return false;
+
+        byte[] compatible = bytecode;
+        int majorVersion = ((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF);
+        if (majorVersion > 65) {
+            compatible = bytecode.clone();
+            compatible[6] = 0;
+            compatible[7] = 65;
+        }
+
+        final boolean[] found = {false};
+        try {
+            org.objectweb.asm.ClassReader reader = new org.objectweb.asm.ClassReader(compatible);
+            reader.accept(new org.objectweb.asm.ClassVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                @Override
+                public org.objectweb.asm.AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                    checkAnn(descriptor);
+                    return null;
+                }
+
+                @Override
+                public org.objectweb.asm.FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
+                    return new org.objectweb.asm.FieldVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override
+                        public org.objectweb.asm.AnnotationVisitor visitAnnotation(String desc, boolean vis) {
+                            checkAnn(desc);
+                            return null;
+                        }
+                    };
+                }
+
+                @Override
+                public org.objectweb.asm.MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                    return new org.objectweb.asm.MethodVisitor(org.objectweb.asm.Opcodes.ASM9) {
+                        @Override
+                        public org.objectweb.asm.AnnotationVisitor visitAnnotation(String desc, boolean vis) {
+                            checkAnn(desc);
+                            return null;
+                        }
+                    };
+                }
+
+                private void checkAnn(String desc) {
+                    if (desc != null) {
+                        String annType = org.objectweb.asm.Type.getType(desc).getClassName();
+                        if (annType.equals(fullAnn) || annType.endsWith("." + simpleAnn) || annType.equals(simpleAnn)) {
+                            found[0] = true;
+                        }
+                    }
+                }
+            }, org.objectweb.asm.ClassReader.SKIP_CODE | org.objectweb.asm.ClassReader.SKIP_DEBUG | org.objectweb.asm.ClassReader.SKIP_FRAMES);
+        } catch (Exception ignored) {}
+
+        return found[0];
     }
 
     public static byte[] loadClassBytes(File archiveFile, String classPath) throws IOException {

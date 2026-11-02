@@ -195,7 +195,8 @@ public class JavadecMcpServer {
                                         "type", "object",
                                         "properties", Map.of(
                                                 "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive (supports ~ and $HOME)"),
-                                                "pattern", Map.of("type", "string", "description", "Optional substring or package filter for class names")
+                                                "pattern", Map.of("type", "string", "description", "Optional substring or package filter for class names"),
+                                                "annotation", Map.of("type", "string", "description", "Optional annotation name filter (e.g. @RestController, @Entity, @Service)")
                                         ),
                                         "required", List.of("jarPath")
                                 ))
@@ -209,7 +210,8 @@ public class JavadecMcpServer {
                                 }
 
                                 String pattern = (String) request.arguments().get("pattern");
-                                List<String> list = DECOMPILER.listArchiveClasses(jar, pattern);
+                                String annotation = (String) request.arguments().get("annotation");
+                                List<String> list = DECOMPILER.listArchiveClasses(jar, pattern, annotation);
                                 String textResult = list.isEmpty()
                                         ? (pattern != null && !pattern.isBlank() ? "// No classes found matching pattern '" + pattern + "' in archive: " + jarPath : "// No classes found in archive: " + jarPath)
                                         : String.join("\n", list);
@@ -820,6 +822,95 @@ public class JavadecMcpServer {
                                 String moduleInfo = DECOMPILER.inspectModule(jar);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(moduleInfo)))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("security_audit")
+                                .description("Audit archive or class bytecode for security vulnerabilities and risky anti-patterns (Command injection, deserialization, reflection bypass, weak crypto)")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive or Maven GAV coordinate"),
+                                                "minSeverity", Map.of("type", "string", "description", "Optional minimum severity: CRITICAL, HIGH, MEDIUM, LOW"),
+                                                "pathFilter", Map.of("type", "string", "description", "Optional package or path filter inside archive")
+                                        ),
+                                        "required", List.of("jarPath")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
+                                String minSevStr = (String) request.arguments().get("minSeverity");
+                                SecurityFindingItem.Severity minSev = null;
+                                if (minSevStr != null && !minSevStr.isBlank()) {
+                                    try {
+                                        minSev = SecurityFindingItem.Severity.valueOf(minSevStr.trim().toUpperCase());
+                                    } catch (Exception ignored) {}
+                                }
+                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                SecurityAuditResult result = DECOMPILER.auditSecurity(jar, minSev, pathFilter);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("inspect_metrics")
+                                .description("Inspect JVM technical bytecode metrics (instructions count, maxStack, maxLocals, tryCatch blocks) for a class or method")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> or GAV"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "methodName", Map.of("type", "string", "description", "Optional method name to inspect exclusively")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                String methodName = (String) request.arguments().get("methodName");
+                                ClassMetricsResult result;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.extractArchiveMetrics(jar, target.substring(bangIdx + 1), methodName);
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    result = DECOMPILER.extractMetrics(bytes, methodName);
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
                                         .isError(false)
                                         .build();
                             } catch (Exception e) {

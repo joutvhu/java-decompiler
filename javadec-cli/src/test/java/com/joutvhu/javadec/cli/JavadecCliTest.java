@@ -204,6 +204,20 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testAuditCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("audit", refJar.getAbsolutePath());
+        assertEquals(0, exitCode);
+    }
+
+    @Test
+    public void testMetricsCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("metrics", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 
