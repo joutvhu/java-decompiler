@@ -141,6 +141,13 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testDisasmCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("disasm", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class", "-m", "main");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

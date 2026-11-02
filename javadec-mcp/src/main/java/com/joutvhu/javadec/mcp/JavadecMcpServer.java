@@ -319,6 +319,8 @@ public class JavadecMcpServer {
                                                 "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> (supports ~ and $HOME)"),
                                                 "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
+                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
@@ -335,7 +337,11 @@ public class JavadecMcpServer {
 
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+                                boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
+                                boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
                                 DecompileOptions options = DecompileOptions.builder()
+                                        .deobfuscate(deobfuscate)
+                                        .showHexLiterals(showHex)
                                         .lineOffset(lineOffset)
                                         .lineLimit(lineLimit)
                                         .build();
@@ -372,6 +378,8 @@ public class JavadecMcpServer {
                                                 "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
                                                 "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
                                                 "methodName", Map.of("type", "string", "description", "Name of the method to decompile"),
+                                                "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
+                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
@@ -390,7 +398,11 @@ public class JavadecMcpServer {
                                 String methodName = (String) request.arguments().get("methodName");
                                 Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+                                boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
+                                boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
                                 DecompileOptions options = DecompileOptions.builder()
+                                        .deobfuscate(deobfuscate)
+                                        .showHexLiterals(showHex)
                                         .lineOffset(lineOffset)
                                         .lineLimit(lineLimit)
                                         .build();
@@ -403,6 +415,56 @@ public class JavadecMcpServer {
                                 } else {
                                     File f = PathUtil.resolveFile(target);
                                     result = DECOMPILER.decompileFileMethod(f, methodName, options);
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result)))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("disassemble_bytecode")
+                                .description("Disassemble class or method bytecode into readable JVM instructions and opcodes (iload, invokevirtual, tableswitch, etc.)")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file, <jarPath>!<classPath>, or GAV: <g:a:v>!<classPath>"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "methodName", Map.of("type", "string", "description", "Optional method name to disassemble exclusively"),
+                                                "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
+                                                "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                String methodName = (String) request.arguments().get("methodName");
+                                Integer lineOffset = request.arguments().get("lineOffset") instanceof Number n ? n.intValue() : null;
+                                Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
+
+                                String result;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.disassembleArchiveClass(jar, target.substring(bangIdx + 1), methodName, lineOffset, lineLimit);
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    result = DECOMPILER.disassembleFile(file, methodName, lineOffset, lineLimit);
                                 }
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result)))
@@ -468,7 +530,9 @@ public class JavadecMcpServer {
                                         "properties", Map.of(
                                                 "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive (supports ~ and $HOME)"),
                                                 "outputDir", Map.of("type", "string", "description", "Directory path on disk to output decompiled .java source files"),
-                                                "pathFilter", Map.of("type", "string", "description", "Optional package or path filter (e.g. com/example/service)")
+                                                "pathFilter", Map.of("type", "string", "description", "Optional package or path filter (e.g. com/example/service)"),
+                                                "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
+                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal")
                                         ),
                                         "required", List.of("jarPath", "outputDir")
                                 ))
@@ -484,7 +548,13 @@ public class JavadecMcpServer {
                                 String outputDir = (String) request.arguments().get("outputDir");
                                 File outDir = PathUtil.resolveFile(outputDir);
                                 String pathFilter = (String) request.arguments().get("pathFilter");
-                                ExportResult result = DECOMPILER.exportArchive(jar, outDir, pathFilter, DecompileOptions.defaults());
+                                boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
+                                boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                DecompileOptions options = DecompileOptions.builder()
+                                        .deobfuscate(deobfuscate)
+                                        .showHexLiterals(showHex)
+                                        .build();
+                                ExportResult result = DECOMPILER.exportArchive(jar, outDir, pathFilter, options);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result.toSummaryString())))
                                         .isError(false)

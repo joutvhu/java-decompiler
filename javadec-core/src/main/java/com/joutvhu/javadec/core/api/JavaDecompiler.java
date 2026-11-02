@@ -1,5 +1,6 @@
 package com.joutvhu.javadec.core.api;
 
+import com.joutvhu.javadec.core.disasm.BytecodeDisassembler;
 import com.joutvhu.javadec.core.engine.CfrDecompilerEngine;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.ArchiveTree;
@@ -276,6 +277,33 @@ public class JavaDecompiler {
     }
 
     /**
+     * Disassembles class bytecode into readable JVM instructions and opcodes.
+     */
+    public String disassemble(byte[] bytecode, String methodName, Integer lineOffset, Integer lineLimit) {
+        return BytecodeDisassembler.disassemble(bytecode, methodName, lineOffset, lineLimit);
+    }
+
+    public String disassemble(byte[] bytecode) {
+        return disassemble(bytecode, null, null, null);
+    }
+
+    /**
+     * Disassembles a class inside an archive into readable JVM bytecode instructions.
+     */
+    public String disassembleArchiveClass(File archiveFile, String classPath, String methodName, Integer lineOffset, Integer lineLimit) throws IOException {
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
+        return disassemble(bytes, methodName, lineOffset, lineLimit);
+    }
+
+    /**
+     * Disassembles a standalone .class file into readable JVM bytecode instructions.
+     */
+    public String disassembleFile(File classFile, String methodName, Integer lineOffset, Integer lineLimit) throws IOException {
+        byte[] bytes = Files.readAllBytes(classFile.toPath());
+        return disassemble(bytes, methodName, lineOffset, lineLimit);
+    }
+
+    /**
      * Decompiles and extracts only the specified method body to minimize token usage.
      */
     public String decompileMethod(String className, byte[] bytecode, String methodName, DecompileOptions options) {
@@ -284,6 +312,8 @@ public class JavaDecompiler {
                 .showLineNumbers(opts.showLineNumbers())
                 .includeSyntheticMembers(opts.includeSyntheticMembers())
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .deobfuscate(opts.deobfuscate())
+                .showHexLiterals(opts.showHexLiterals())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = defaultEngine.decompile(className, bytecode, unpagedOpts);
@@ -301,6 +331,8 @@ public class JavaDecompiler {
                 .showLineNumbers(opts.showLineNumbers())
                 .includeSyntheticMembers(opts.includeSyntheticMembers())
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .deobfuscate(opts.deobfuscate())
+                .showHexLiterals(opts.showHexLiterals())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = decompileFile(classFile, unpagedOpts);
@@ -318,6 +350,8 @@ public class JavaDecompiler {
                 .showLineNumbers(opts.showLineNumbers())
                 .includeSyntheticMembers(opts.includeSyntheticMembers())
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
+                .deobfuscate(opts.deobfuscate())
+                .showHexLiterals(opts.showHexLiterals())
                 .preferredEngine(opts.preferredEngine())
                 .build();
         String fullSource = decompileArchiveClass(archiveFile, classPath, unpagedOpts);

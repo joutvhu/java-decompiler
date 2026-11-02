@@ -55,8 +55,11 @@ When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Works
 ## ✨ Key Features
 
 - **📖 Sources-Aware Inspection (Javadoc Preservation)**: Automatically locates companion `<artifact>-<version>-sources.jar` in Maven local repository (`~/.m2/repository`) or Gradle cache (`~/.gradle/caches`). When present, it serves original author source code with **100% of Javadocs and inline comments intact**!
+- **📦 Direct Maven Coordinate Resolution (`g:a:v`)**: Inspect libraries directly by Maven coordinates (e.g. `org.springframework:spring-core:6.1.0`), checking `~/.m2/repository` and auto-downloading from Maven Central on-demand.
 - **⚡ Token-Efficient Skeletons via ASM (`outline`)**: Extracts full class signatures, fields, annotations, constructors, and parameter names in ~100–300 tokens without decompiling method bodies.
 - **🔍 Instant Bytecode Reference & Caller Search (`find` / `refs`)**: Scans thousands of classes in milliseconds directly in bytecode to locate all callers of a method, field reads/writes, or class instantiations with line numbers.
+- **⚙️ JVM Bytecode Disassembly (`disasm`)**: Low-level opcode and instruction disassembler (`iload`, `invokevirtual`, `monitorenter`) for inspecting obfuscated or corrupted bytecode.
+- **🛡️ Deobfuscation & Hex Literals (`--deobfuscate`, `--hex`)**: Automatically cleans up illegal/obfuscated identifier names and formats bitmasks as hexadecimal literals.
 - **🎯 Precision Method Decompilation (`view -m`)**: Decompiles only the targeted method (handling all overloads, constructor initializers, abstract/interface methods, and preceding annotations).
 - **📑 Line-Based Pagination (`--offset` & `--limit`)**: Read massive classes or resources in bite-sized chunks to prevent prompt context bloat.
 - **🌳 Scoped Tree Hierarchy (`tree --path --depth`)**: Zoom in on specific packages or sub-directories with configurable depth limit.
@@ -286,6 +289,7 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | **`find_references`** | `jarPath` (req), `target` (req), `limit` (opt), `pathFilter` (opt) | Finds all callers, field accesses, or class usages directly from bytecode with line numbers. |
 | **`decompile_class`** | `target` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc). |
 | **`decompile_method`** | `target` (req), `methodName` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
+| **`disassemble_bytecode`** | `target` (req), `methodName` (opt), `lineOffset` (opt), `lineLimit` (opt) | Disassembles bytecode into human-readable JVM instructions and opcodes. |
 | **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Decompiles entire archive or package into `.java` files on disk. |
 | **`extract_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Extracts raw archive files (bytecode and resources) to disk as-is. |
 

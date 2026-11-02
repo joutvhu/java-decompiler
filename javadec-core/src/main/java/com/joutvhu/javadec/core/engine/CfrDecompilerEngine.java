@@ -59,6 +59,14 @@ public class CfrDecompilerEngine implements DecompilerEngine {
                 cfrOptions.put("removeinnerclasssynthetics", "false");
             }
             cfrOptions.put("removeboilerplate", options.hideDefaultConstructors() ? "true" : "false");
+            if (options.deobfuscate()) {
+                cfrOptions.put("renameillegalidents", "true");
+                cfrOptions.put("renamedupmembers", "true");
+                cfrOptions.put("renameenumidents", "true");
+            }
+            if (options.showHexLiterals()) {
+                cfrOptions.put("sugarretrieval", "true");
+            }
         }
 
         CfrDriver driver = new CfrDriver.Builder()

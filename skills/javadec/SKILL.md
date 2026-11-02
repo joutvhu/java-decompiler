@@ -62,6 +62,7 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `find_references(jarPath, target, limit?, pathFilter?)` — ultra-fast caller/usage scanner with line numbers
 - `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads (with Javadoc if available)
 - `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination (with Javadoc if available)
+- `disassemble_bytecode(target, methodName?, lineOffset?, lineLimit?)` — disassemble into readable JVM opcodes (iload, invokevirtual, tableswitch)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
 - `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
@@ -72,9 +73,10 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec list <jarPath> -p <pattern>`
 - `javadec outline <target>`
 - `javadec find <jarPath> <target> [-l <limit>] [-p <filter>]` (aliases: `refs`, `usages`)
-- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>]`
-- `javadec view <target> [--offset <n>] [--limit <n>]`
-- `javadec dump <jarPath> -o <outputDir> [-p <filter>]` (alias: `export`)
+- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
+- `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
+- `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)
+- `javadec dump <jarPath> -o <outputDir> [-p <filter>] [--deobfuscate] [--hex]` (alias: `export`)
 - `javadec extract <jarPath> -o <outputDir> [-p <filter>]`
 
 *Note on Java Runtime: If the system default Java is older than Java 21, set `JAVADEC_JAVA_PATH` or `JAVADEC_JAVA_HOME` pointing to a JDK 21+ installation when executing CLI commands.*
@@ -84,6 +86,11 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 ## 4. Target URI Format
 
 When addressing a class, use the standard target URI syntax:
+- **Maven Coordinate (GAV)**: `<groupId>:<artifactId>:<version>!<internal/package/ClassName.class>`  
+  *(Automatically checks `~/.m2/repository` and downloads from Maven Central if absent!)*  
+  *Examples:*
+  - `org.springframework:spring-core:6.1.0!org/springframework/core/io/Resource.class`
+  - `com.google.guava:guava:33.0.0-jre!com/google/common/collect/ImmutableList.class`
 - **Class inside JAR archive**: `<path/to/archive.jar>!<internal/package/ClassName.class>`  
   *Examples:*
   - `C:/Users/name/.m2/repository/org/springframework/spring-core/6.1.0/spring-core-6.1.0.jar!org/springframework/core/io/Resource.class`

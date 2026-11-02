@@ -67,11 +67,19 @@ public class PathUtil {
 
     public static File resolveFile(File file) {
         if (file == null) return null;
-        return new File(expandUserHome(file.getPath()));
+        return resolveFile(file.getPath());
     }
 
     public static File resolveFile(String path) {
         if (path == null) return null;
-        return new File(expandUserHome(path));
+        String expanded = expandUserHome(path);
+        if (MavenCoordinateResolver.isMavenCoordinate(expanded)) {
+            try {
+                return MavenCoordinateResolver.resolveCoordinate(expanded);
+            } catch (Exception e) {
+                return new File(expanded);
+            }
+        }
+        return new File(expanded);
     }
 }

@@ -30,6 +30,7 @@ import java.util.concurrent.Callable;
                 JavadecCli.ListCommand.class,
                 JavadecCli.OutlineCommand.class,
                 JavadecCli.ViewCommand.class,
+                JavadecCli.DisasmCommand.class,
                 JavadecCli.ResourceCommand.class,
                 JavadecCli.FindCommand.class,
                 JavadecCli.DumpCommand.class,
@@ -176,6 +177,12 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"--limit"}, description = "Number of lines to read")
         private Integer limit;
 
+        @Option(names = {"--deobfuscate", "--rename"}, description = "Rename illegal, obfuscated, or duplicated identifiers")
+        private boolean deobfuscate;
+
+        @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
+        private boolean showHex;
+
         @Override
         public Integer call() throws Exception {
             String resolvedTarget = target;
@@ -186,6 +193,8 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             DecompileOptions options = DecompileOptions.builder()
                     .showLineNumbers(showLines)
+                    .deobfuscate(deobfuscate)
+                    .showHexLiterals(showHex)
                     .lineOffset(offset)
                     .lineLimit(limit)
                     .build();
@@ -226,6 +235,60 @@ public class JavadecCli implements Callable<Integer> {
                     String result = decompiler.decompileFile(file, options);
                     System.out.println(result);
                 }
+            }
+            return 0;
+        }
+    }
+
+    @Command(name = "disasm", aliases = {"bytecode", "ops"}, description = "Disassemble class or method bytecode into readable JVM instructions and opcodes")
+    static class DisasmCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file, <jarPath>!<classPath>, or GAV: <g:a:v>!<classPath>")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
+        @Option(names = {"-m", "--method"}, description = "Disassemble only this specific method")
+        private String method;
+
+        @Option(names = {"--offset"}, description = "1-based starting line number to read from")
+        private Integer offset;
+
+        @Option(names = {"--limit"}, description = "Number of lines to read")
+        private Integer limit;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                String classPath = resolvedTarget.substring(bangIdx + 1);
+                String result = decompiler.disassembleArchiveClass(jar, classPath, method, offset, limit);
+                System.out.println(result);
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + resolvedTarget + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec disasm " + resolvedTarget + " com/example/MyClass.class");
+                    return 1;
+                }
+                String result = decompiler.disassembleFile(file, method, offset, limit);
+                System.out.println(result);
             }
             return 0;
         }
@@ -308,6 +371,12 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"-l", "--lines"}, description = "Include bytecode line number comments in output")
         private boolean showLines;
 
+        @Option(names = {"--deobfuscate", "--rename"}, description = "Rename illegal, obfuscated, or duplicated identifiers")
+        private boolean deobfuscate;
+
+        @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
+        private boolean showHex;
+
         @Override
         public Integer call() throws Exception {
             File jar = PathUtil.resolveFile(jarFile);
@@ -317,7 +386,11 @@ public class JavadecCli implements Callable<Integer> {
             }
             File outDir = PathUtil.resolveFile(outputDir);
             JavaDecompiler decompiler = new JavaDecompiler();
-            DecompileOptions options = DecompileOptions.builder().showLineNumbers(showLines).build();
+            DecompileOptions options = DecompileOptions.builder()
+                    .showLineNumbers(showLines)
+                    .deobfuscate(deobfuscate)
+                    .showHexLiterals(showHex)
+                    .build();
             ExportResult result = decompiler.exportArchive(jar, outDir, pathFilter, options);
             System.out.println(result.toSummaryString());
             return 0;

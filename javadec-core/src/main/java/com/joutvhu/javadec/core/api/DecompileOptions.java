@@ -1,18 +1,20 @@
 package com.joutvhu.javadec.core.api;
 
 /**
- * Options to configure bytecode decompilation and source pagination.
+ * Options to configure bytecode decompilation, deobfuscation, formatting, and source pagination.
  */
 public record DecompileOptions(
         boolean showLineNumbers,
         boolean includeSyntheticMembers,
         boolean hideDefaultConstructors,
-        String preferredEngine, // "fernflower", "cfr", or "auto"
+        boolean deobfuscate,
+        boolean showHexLiterals,
+        String preferredEngine, // "auto", "native"
         Integer lineOffset,     // 1-based start line (null for beginning)
         Integer lineLimit       // max lines to return (null for all remaining lines)
 ) {
     public static DecompileOptions defaults() {
-        return new DecompileOptions(false, false, true, "auto", null, null);
+        return new DecompileOptions(false, false, true, false, false, "auto", null, null);
     }
 
     public static Builder builder() {
@@ -23,6 +25,8 @@ public record DecompileOptions(
         private boolean showLineNumbers = false;
         private boolean includeSyntheticMembers = false;
         private boolean hideDefaultConstructors = true;
+        private boolean deobfuscate = false;
+        private boolean showHexLiterals = false;
         private String preferredEngine = "auto";
         private Integer lineOffset = null;
         private Integer lineLimit = null;
@@ -42,6 +46,16 @@ public record DecompileOptions(
             return this;
         }
 
+        public Builder deobfuscate(boolean deobfuscate) {
+            this.deobfuscate = deobfuscate;
+            return this;
+        }
+
+        public Builder showHexLiterals(boolean showHexLiterals) {
+            this.showHexLiterals = showHexLiterals;
+            return this;
+        }
+
         public Builder preferredEngine(String preferredEngine) {
             this.preferredEngine = preferredEngine;
             return this;
@@ -58,7 +72,7 @@ public record DecompileOptions(
         }
 
         public DecompileOptions build() {
-            return new DecompileOptions(showLineNumbers, includeSyntheticMembers, hideDefaultConstructors, preferredEngine, lineOffset, lineLimit);
+            return new DecompileOptions(showLineNumbers, includeSyntheticMembers, hideDefaultConstructors, deobfuscate, showHexLiterals, preferredEngine, lineOffset, lineLimit);
         }
     }
 }

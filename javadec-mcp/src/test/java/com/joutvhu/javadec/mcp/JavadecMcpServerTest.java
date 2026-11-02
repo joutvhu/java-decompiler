@@ -128,4 +128,14 @@ public class JavadecMcpServerTest {
             assertNotNull(res.formattedSummary());
         });
     }
+
+    @Test
+    public void testDisassembleBytecodeExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            String res = decompiler.disassembleArchiveClass(refJar, "com/joutvhu/javadec/test/SampleService.class", "main", null, null);
+            assertNotNull(res);
+            assertTrue(res.contains("GETSTATIC") || res.contains("INVOKEVIRTUAL") || res.contains("RETURN"));
+        });
+    }
 }
