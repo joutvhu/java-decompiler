@@ -1,14 +1,14 @@
 package com.joutvhu.javadec.core.api;
 
+import com.joutvhu.javadec.core.diff.JarApiDiffEngine;
 import com.joutvhu.javadec.core.disasm.BytecodeDisassembler;
 import com.joutvhu.javadec.core.engine.CfrDecompilerEngine;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
-import com.joutvhu.javadec.core.model.ArchiveTree;
-import com.joutvhu.javadec.core.model.ClassOutline;
-import com.joutvhu.javadec.core.model.ExportResult;
-import com.joutvhu.javadec.core.model.ReferenceSearchResult;
+import com.joutvhu.javadec.core.model.*;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
 import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
+import com.joutvhu.javadec.core.scanner.ConstantStringExtractor;
+import com.joutvhu.javadec.core.stack.StackTraceContextExtractor;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -85,6 +85,31 @@ public class JavaDecompiler {
      */
     public ReferenceSearchResult findReferencesInDirectory(File directory, String query, Integer limit) throws IOException {
         return BytecodeReferenceScanner.scanDirectory(directory, query, limit);
+    }
+
+    /**
+     * Extracts hardcoded string constants (URLs, SQL queries, tokens, error messages) from an archive.
+     */
+    public ConstantStringResult extractStrings(File archiveFile, String pathFilter, String textFilter, Integer minLength, Integer limit) throws IOException {
+        return ConstantStringExtractor.extractFromArchive(archiveFile, pathFilter, textFilter, minLength, limit);
+    }
+
+    public ConstantStringResult extractStringsFromClass(byte[] bytecode, String className, String textFilter, Integer minLength, Integer limit) {
+        return ConstantStringExtractor.extractFromClassBytes(bytecode, className, textFilter, minLength, limit);
+    }
+
+    /**
+     * Maps exception stack trace lines directly to targeted source code snippets with surrounding context.
+     */
+    public StackTraceSnippetResult inspectStackTraceLine(File archiveFile, String classPath, int targetLine, Integer contextLines) throws IOException {
+        return StackTraceContextExtractor.extract(this, archiveFile, classPath, targetLine, contextLines);
+    }
+
+    /**
+     * Compares binary public API differences (breaking changes, added/removed/modified methods) between two JARs.
+     */
+    public JarApiDiffResult compareJarApis(File jar1, File jar2, String packageFilter, boolean breakingOnly) throws IOException {
+        return JarApiDiffEngine.compare(jar1, jar2, packageFilter, breakingOnly);
     }
 
     /**

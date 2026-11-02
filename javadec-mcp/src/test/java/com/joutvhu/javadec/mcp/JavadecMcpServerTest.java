@@ -138,4 +138,34 @@ public class JavadecMcpServerTest {
             assertTrue(res.contains("GETSTATIC") || res.contains("INVOKEVIRTUAL") || res.contains("RETURN"));
         });
     }
+
+    @Test
+    public void testExtractStringsExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.extractStrings(refJar, null, null, 3, 10);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
+
+    @Test
+    public void testInspectStackTraceLineExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.inspectStackTraceLine(refJar, "com/joutvhu/javadec/test/SampleService.class", 4, 2);
+            assertNotNull(res);
+            assertNotNull(res.snippet());
+        });
+    }
+
+    @Test
+    public void testJarDiffExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.compareJarApis(refJar, refJar, null, false);
+            assertNotNull(res);
+            assertNotNull(res.formattedReport());
+        });
+    }
 }

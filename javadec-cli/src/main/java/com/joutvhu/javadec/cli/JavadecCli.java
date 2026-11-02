@@ -3,10 +3,7 @@ package com.joutvhu.javadec.cli;
 import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
 import com.joutvhu.javadec.core.loader.PathUtil;
-import com.joutvhu.javadec.core.model.ArchiveTree;
-import com.joutvhu.javadec.core.model.ClassOutline;
-import com.joutvhu.javadec.core.model.ExportResult;
-import com.joutvhu.javadec.core.model.ReferenceSearchResult;
+import com.joutvhu.javadec.core.model.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -17,6 +14,7 @@ import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.Callable;
 
@@ -33,6 +31,9 @@ import java.util.concurrent.Callable;
                 JavadecCli.DisasmCommand.class,
                 JavadecCli.ResourceCommand.class,
                 JavadecCli.FindCommand.class,
+                JavadecCli.StringsCommand.class,
+                JavadecCli.TraceCommand.class,
+                JavadecCli.DiffCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -353,6 +354,137 @@ public class JavadecCli implements Callable<Integer> {
             }
 
             System.out.println(result.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "strings", aliases = {"constants"}, description = "Extract hardcoded string constants (URLs, SQL, tokens, error messages) from an archive or class")
+    static class StringsCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar, .class, or GAV coordinate")
+        private String target;
+
+        @Option(names = {"-f", "--filter"}, description = "Optional substring to filter strings (case-insensitive)")
+        private String filter;
+
+        @Option(names = {"--min-len"}, description = "Minimum string length (default: 3)")
+        private Integer minLength;
+
+        @Option(names = {"-l", "--limit"}, description = "Maximum number of strings to return (default: 200)")
+        private Integer limit;
+
+        @Option(names = {"-p", "--path"}, description = "Optional class path/package filter inside archive")
+        private String pathFilter;
+
+        @Override
+        public Integer call() throws Exception {
+            JavaDecompiler decompiler = new JavaDecompiler();
+            File file = PathUtil.resolveFile(target);
+            if (!file.exists()) {
+                System.err.println("Error: File not found: " + file.getPath());
+                return 1;
+            }
+
+            ConstantStringResult result;
+            if (isArchiveFile(file)) {
+                result = decompiler.extractStrings(file, pathFilter, filter, minLength, limit);
+            } else {
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.extractStringsFromClass(bytes, file.getName(), filter, minLength, limit);
+            }
+            System.out.println(result.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "trace", aliases = {"stack"}, description = "Locate and extract source context surrounding a specific line from a stack trace or log")
+    static class TraceCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> (or GAV)")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Line number (or specify target as <path>:<line>)")
+        private String lineArg;
+
+        @Option(names = {"-C", "--context"}, description = "Number of surrounding context lines to display (default: 3)")
+        private Integer contextLines;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            int targetLine = -1;
+
+            if (lineArg != null && !lineArg.isBlank()) {
+                if (lineArg.contains(":")) {
+                    resolvedTarget = target + "!" + lineArg.substring(0, lineArg.indexOf(':'));
+                    targetLine = Integer.parseInt(lineArg.substring(lineArg.indexOf(':') + 1));
+                } else {
+                    targetLine = Integer.parseInt(lineArg);
+                }
+            } else if (target.contains(":")) {
+                int colonIdx = target.lastIndexOf(':');
+                targetLine = Integer.parseInt(target.substring(colonIdx + 1));
+                resolvedTarget = target.substring(0, colonIdx);
+            }
+
+            if (targetLine <= 0) {
+                System.err.println("Error: Please provide a valid 1-based line number (e.g. javadec trace <target> 45)");
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            StackTraceSnippetResult snippet;
+
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                snippet = decompiler.inspectStackTraceLine(jar, resolvedTarget.substring(bangIdx + 1), targetLine, contextLines);
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                snippet = decompiler.inspectStackTraceLine(null, file.getPath(), targetLine, contextLines);
+            }
+
+            System.out.println(snippet.snippet());
+            return 0;
+        }
+    }
+
+    @Command(name = "diff", aliases = {"delta"}, description = "Compare binary public API differences (breaking changes, added/removed/modified methods) between two JARs or library versions")
+    static class DiffCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to first JAR or Maven coordinate (e.g. org.ow2.asm:asm:9.6)")
+        private String target1;
+
+        @Parameters(index = "1", description = "Path to second JAR or Maven coordinate (e.g. org.ow2.asm:asm:9.7)")
+        private String target2;
+
+        @Option(names = {"-p", "--path"}, description = "Optional package filter (e.g. org.objectweb.asm)")
+        private String pathFilter;
+
+        @Option(names = {"--breaking-only"}, description = "Report only breaking changes (removed or modified public APIs)")
+        private boolean breakingOnly;
+
+        @Override
+        public Integer call() throws Exception {
+            File jar1 = PathUtil.resolveFile(target1);
+            if (!jar1.exists()) {
+                System.err.println("Error: First archive not found: " + target1);
+                return 1;
+            }
+            File jar2 = PathUtil.resolveFile(target2);
+            if (!jar2.exists()) {
+                System.err.println("Error: Second archive not found: " + target2);
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            JarApiDiffResult diff = decompiler.compareJarApis(jar1, jar2, pathFilter, breakingOnly);
+            System.out.println(diff.formattedReport());
             return 0;
         }
     }

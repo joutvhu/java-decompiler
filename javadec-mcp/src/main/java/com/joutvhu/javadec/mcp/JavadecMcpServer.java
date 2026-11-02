@@ -3,10 +3,7 @@ package com.joutvhu.javadec.mcp;
 import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
 import com.joutvhu.javadec.core.loader.PathUtil;
-import com.joutvhu.javadec.core.model.ArchiveTree;
-import com.joutvhu.javadec.core.model.ClassOutline;
-import com.joutvhu.javadec.core.model.ExportResult;
-import com.joutvhu.javadec.core.model.ReferenceSearchResult;
+import com.joutvhu.javadec.core.model.*;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -511,6 +508,144 @@ public class JavadecMcpServer {
                                 ReferenceSearchResult result = DECOMPILER.findReferences(jar, target, limit, pathFilter);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("extract_jar_strings")
+                                .description("Extract hardcoded string constants (URLs, SQL, tokens, error messages) directly from bytecode without decompilation")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive or Maven GAV coordinate"),
+                                                "pathFilter", Map.of("type", "string", "description", "Optional class path/package prefix filter inside archive"),
+                                                "textFilter", Map.of("type", "string", "description", "Optional substring to filter strings (case-insensitive)"),
+                                                "minLength", Map.of("type", "integer", "description", "Minimum string length (default: 3)"),
+                                                "limit", Map.of("type", "integer", "description", "Maximum number of strings to return (default: 200)")
+                                        ),
+                                        "required", List.of("jarPath")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
+                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                String textFilter = (String) request.arguments().get("textFilter");
+                                Integer minLen = request.arguments().get("minLength") instanceof Number n ? n.intValue() : 3;
+                                Integer limit = request.arguments().get("limit") instanceof Number n ? n.intValue() : 200;
+
+                                ConstantStringResult result = DECOMPILER.extractStrings(jar, pathFilter, textFilter, minLen, limit);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("inspect_stack_line")
+                                .description("Locate and extract source code snippet surrounding a specific line number from a stack trace or log (~95% token savings)")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> or GAV"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "lineNumber", Map.of("type", "integer", "description", "1-based line number from exception stack trace"),
+                                                "contextLines", Map.of("type", "integer", "description", "Number of surrounding context lines to include (default: 3)")
+                                        ),
+                                        "required", List.of("lineNumber"),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                Integer lineNum = request.arguments().get("lineNumber") instanceof Number n ? n.intValue() : -1;
+                                if (lineNum <= 0) {
+                                    throw new IllegalArgumentException("'lineNumber' must be a positive integer.");
+                                }
+                                Integer contextLines = request.arguments().get("contextLines") instanceof Number n ? n.intValue() : 3;
+
+                                StackTraceSnippetResult snippet;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    snippet = DECOMPILER.inspectStackTraceLine(jar, target.substring(bangIdx + 1), lineNum, contextLines);
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    snippet = DECOMPILER.inspectStackTraceLine(null, file.getPath(), lineNum, contextLines);
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(snippet.snippet())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("jar_diff")
+                                .description("Compare binary public API differences (breaking changes, added/removed/modified methods) between two JARs or library versions")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jar1", Map.of("type", "string", "description", "First JAR path or Maven GAV coordinate (e.g. org.ow2.asm:asm:9.6)"),
+                                                "jar2", Map.of("type", "string", "description", "Second JAR path or Maven GAV coordinate (e.g. org.ow2.asm:asm:9.7)"),
+                                                "packageFilter", Map.of("type", "string", "description", "Optional package filter prefix"),
+                                                "breakingOnly", Map.of("type", "boolean", "description", "Optional flag to report only breaking changes")
+                                        ),
+                                        "required", List.of("jar1", "jar2")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jar1Str = (String) request.arguments().get("jar1");
+                                String jar2Str = (String) request.arguments().get("jar2");
+                                File jar1 = PathUtil.resolveFile(jar1Str);
+                                File jar2 = PathUtil.resolveFile(jar2Str);
+
+                                if (!jar1.exists()) {
+                                    throw new FileNotFoundException("First archive not found: " + jar1Str);
+                                }
+                                if (!jar2.exists()) {
+                                    throw new FileNotFoundException("Second archive not found: " + jar2Str);
+                                }
+
+                                String packageFilter = (String) request.arguments().get("packageFilter");
+                                boolean breakingOnly = Boolean.TRUE.equals(request.arguments().get("breakingOnly"));
+                                JarApiDiffResult diff = DECOMPILER.compareJarApis(jar1, jar2, packageFilter, breakingOnly);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(diff.formattedReport())))
                                         .isError(false)
                                         .build();
                             } catch (Exception e) {

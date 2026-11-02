@@ -148,6 +148,27 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testStringsCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("strings", refJar.getAbsolutePath(), "--limit", "10");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
+    public void testTraceCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("trace", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class", "4");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
+    public void testDiffCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("diff", refJar.getAbsolutePath(), refJar.getAbsolutePath());
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

@@ -290,6 +290,9 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | **`decompile_class`** | `target` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles full class source code (auto-resolves `-sources.jar` for Javadoc). |
 | **`decompile_method`** | `target` (req), `methodName` (req), `lineOffset` (opt), `lineLimit` (opt) | Decompiles only a single method and its overloads (with Javadoc if available). |
 | **`disassemble_bytecode`** | `target` (req), `methodName` (opt), `lineOffset` (opt), `lineLimit` (opt) | Disassembles bytecode into human-readable JVM instructions and opcodes. |
+| **`extract_jar_strings`** | `jarPath` (req), `pathFilter` (opt), `textFilter` (opt), `minLength` (opt), `limit` (opt) | Extracts hardcoded string constants (URLs, SQL, tokens, error messages) without decompilation. |
+| **`inspect_stack_line`** | `target` (req), `lineNumber` (req), `contextLines` (opt) | Locates and extracts source snippet surrounding an exception stack trace line (~95% token savings). |
+| **`jar_diff`** | `jar1` (req), `jar2` (req), `packageFilter` (opt), `breakingOnly` (opt) | Compares binary public API differences and breaking changes between two JARs or versions. |
 | **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Decompiles entire archive or package into `.java` files on disk. |
 | **`extract_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt) | Extracts raw archive files (bytecode and resources) to disk as-is. |
 

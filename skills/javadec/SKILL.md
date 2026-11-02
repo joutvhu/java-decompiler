@@ -63,6 +63,9 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `decompile_method(target, methodName, lineOffset?, lineLimit?)` — decompile single method/all overloads (with Javadoc if available)
 - `decompile_class(target, lineOffset?, lineLimit?)` — decompile full class with line pagination (with Javadoc if available)
 - `disassemble_bytecode(target, methodName?, lineOffset?, lineLimit?)` — disassemble into readable JVM opcodes (iload, invokevirtual, tableswitch)
+- `extract_jar_strings(jarPath, pathFilter?, textFilter?, minLength?, limit?)` — extract hardcoded URLs, SQL queries, tokens, error messages without decompilation
+- `inspect_stack_line(target, lineNumber, contextLines?)` — extract focused snippet surrounding a stack trace line (~95% token savings)
+- `jar_diff(jar1, jar2, packageFilter?, breakingOnly?)` — compare binary API differences and breaking changes between two JARs or versions
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
 - `extract_archive(jarPath, outputDir, pathFilter?)` — extract raw archive files (bytecode/resources) to disk
 
@@ -73,6 +76,9 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec list <jarPath> -p <pattern>`
 - `javadec outline <target>`
 - `javadec find <jarPath> <target> [-l <limit>] [-p <filter>]` (aliases: `refs`, `usages`)
+- `javadec strings <target> [-f <filter>] [--min-len <n>] [-l <limit>] [-p <filter>]` (alias: `constants`)
+- `javadec trace <target> <lineNumber> [-C <context>]` (alias: `stack`)
+- `javadec diff <jar1> <jar2> [-p <filter>] [--breaking-only]` (alias: `delta`)
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
 - `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex]`
 - `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)
