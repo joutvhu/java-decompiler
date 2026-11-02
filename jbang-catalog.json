@@ -1,0 +1,15 @@
+{
+  "catalogs": {},
+  "aliases": {
+    "javadec": {
+      "script-ref": "https://github.com/joutvhu/java-decompiler/releases/latest/download/javadec-cli.jar",
+      "description": "Universal & Token-Efficient Java Decompiler & Bytecode Inspector",
+      "java": "21+"
+    },
+    "javadec-mcp": {
+      "script-ref": "https://github.com/joutvhu/java-decompiler/releases/latest/download/javadec-mcp.jar",
+      "description": "Javadec MCP Server for AI agents",
+      "java": "21+"
+    }
+  }
+}

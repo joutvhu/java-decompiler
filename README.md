@@ -86,7 +86,19 @@ When used with **AI Coding Agents** (such as Kiro, Claude, Cursor, Copilot Works
 npx javadec --help
 ```
 
-#### Option 2: Install globally via npm
+#### Option 2: Run via JBang (Java-native, no Node.js required)
+```bash
+# Run CLI directly
+jbang javadec@joutvhu --help
+
+# Run MCP server for AI clients
+jbang javadec-mcp@joutvhu
+
+# (Optional) Install CLI globally to your PATH
+jbang app install --name javadec javadec@joutvhu
+```
+
+#### Option 3: Install globally via npm
 ```bash
 npm install -g javadec
 javadec --help
