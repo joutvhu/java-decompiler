@@ -28,10 +28,15 @@ public class PathUtil {
         } else if (p.startsWith("file://")) {
             p = p.substring(7);
         } else if (p.startsWith("file:/")) {
-            p = p.substring(5);
+            p = p.substring(6);
             if (p.indexOf(':') < 0 && !p.startsWith("/")) {
                 p = "/" + p;
             }
+        }
+
+        // On Windows, strip any leading slash before a drive letter (e.g. /C:/path -> C:/path)
+        if (p.length() >= 3 && p.charAt(0) == '/' && Character.isLetter(p.charAt(1)) && p.charAt(2) == ':') {
+            p = p.substring(1);
         }
 
         // 3. Expand user home across operating systems
