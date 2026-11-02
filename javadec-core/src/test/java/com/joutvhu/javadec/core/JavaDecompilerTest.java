@@ -210,5 +210,19 @@ public class JavaDecompilerTest {
         String userHome = System.getProperty("user.home").replace('\\', '/');
         assertEquals(userHome + "/.m2/repository", PathUtil.expandUserHome("~/.m2/repository"));
         assertEquals(userHome + "/.m2/repository", PathUtil.expandUserHome("$HOME/.m2/repository"));
+
+        // 13. Test native UTF-8 characters in decompiled source (Vietnamese and emoji preserved)
+        String utf8Source = """
+                package com.example;
+                public class Welcome {
+                    public String getGreeting() {
+                        return "Xin chào Việt Nam! 🇻🇳";
+                    }
+                }
+                """;
+        Map<String, byte[]> utf8Classes = TestCompiler.compile("com.example.Welcome", utf8Source);
+        String decompiledUtf8 = decompiler.decompile("com/example/Welcome", utf8Classes.get("com.example.Welcome"), null);
+        assertNotNull(decompiledUtf8);
+        assertTrue(decompiledUtf8.contains("Xin chào Việt Nam!"), "Decompiled code must retain native Vietnamese UTF-8 characters instead of \\uXXXX escapes");
     }
 }

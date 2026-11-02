@@ -57,6 +57,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         Map<String, String> cfrOptions = new HashMap<>();
         cfrOptions.put("comments", "false");
         cfrOptions.put("showversion", "false");
+        cfrOptions.put("hideutf", "false"); // Preserve native UTF-8 characters (Vietnamese diacritics, Asian scripts, emoji) instead of unicode escape sequences
         if (options != null) {
             if (options.showLineNumbers()) {
                 cfrOptions.put("forceprintpages", "true");
