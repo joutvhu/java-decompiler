@@ -45,34 +45,60 @@ public class AuxiliaryClasspathResolver {
     }
 
     private static void resolveManualClasspath(String cp, Set<File> result) {
-        // Split by ';' or ':' (avoid splitting on Windows drive letter 'C:')
-        String[] entries = cp.split("(?<!^[a-zA-Z]):|;");
-        for (String entry : entries) {
-            String path = entry.trim();
-            if (path.isEmpty()) continue;
+        // First split by ';' (standard Windows & MCP delimiter)
+        String[] semiEntries = cp.split(";");
+        for (String item : semiEntries) {
+            String trimmed = item.trim();
+            if (trimmed.isEmpty()) continue;
 
-            if (MavenCoordinateResolver.isMavenCoordinate(path)) {
-                try {
-                    File resolved = MavenCoordinateResolver.resolveCoordinate(path);
-                    if (resolved != null && resolved.exists()) {
-                        result.add(resolved);
-                        continue;
-                    }
-                } catch (Exception ignored) {}
+            // 1. Maven coordinate (contains ':' like 'groupId:artifactId:version')
+            if (MavenCoordinateResolver.isMavenCoordinate(trimmed)) {
+                addCoordinateEntry(trimmed, result);
+                continue;
             }
 
-            File file = PathUtil.resolveFile(path);
-            if (file != null && file.exists()) {
-                if (file.isDirectory()) {
-                    // Add all .jar files in directory
-                    File[] jars = file.listFiles((dir, name) -> name.toLowerCase().endsWith(".jar"));
-                    if (jars != null) {
-                        result.addAll(Arrays.asList(jars));
+            // 2. Direct file/directory path
+            File directFile = PathUtil.resolveFile(trimmed);
+            if (directFile != null && directFile.exists()) {
+                addFileEntry(directFile, result);
+                continue;
+            }
+
+            // 3. Fallback for Unix multi-path colon separation (e.g. '/path/a.jar:/path/b.jar')
+            // Avoid splitting on Windows drive letters (e.g. 'C:\...')
+            String[] colonEntries = trimmed.split("(?<!^[a-zA-Z]):");
+            for (String entry : colonEntries) {
+                String path = entry.trim();
+                if (path.isEmpty()) continue;
+                if (MavenCoordinateResolver.isMavenCoordinate(path)) {
+                    addCoordinateEntry(path, result);
+                } else {
+                    File file = PathUtil.resolveFile(path);
+                    if (file != null && file.exists()) {
+                        addFileEntry(file, result);
                     }
-                } else if (file.isFile()) {
-                    result.add(file);
                 }
             }
+        }
+    }
+
+    private static void addCoordinateEntry(String coordinate, Set<File> result) {
+        try {
+            File resolved = MavenCoordinateResolver.resolveCoordinate(coordinate);
+            if (resolved != null && resolved.exists()) {
+                result.add(resolved);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static void addFileEntry(File file, Set<File> result) {
+        if (file.isDirectory()) {
+            File[] jars = file.listFiles((dir, name) -> name.toLowerCase().endsWith(".jar"));
+            if (jars != null) {
+                result.addAll(Arrays.asList(jars));
+            }
+        } else if (file.isFile()) {
+            result.add(file);
         }
     }
 

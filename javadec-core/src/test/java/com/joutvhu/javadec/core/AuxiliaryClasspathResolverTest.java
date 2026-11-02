@@ -36,6 +36,23 @@ public class AuxiliaryClasspathResolverTest {
         // 2. Directory containing JAR
         List<File> jars2 = AuxiliaryClasspathResolver.resolve(null, tempDir.toFile().getAbsolutePath(), false);
         assertEquals(1, jars2.size());
+
+        // 3. Multiple paths separated by semicolon
+        File dummyJar2 = tempDir.resolve("lib2.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(dummyJar2))) {
+            zos.putNextEntry(new ZipEntry("META-INF/MANIFEST.MF"));
+            zos.write("Manifest-Version: 1.0\n".getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+        String multiCp = dummyJar.getAbsolutePath() + ";" + dummyJar2.getAbsolutePath();
+        List<File> jars3 = AuxiliaryClasspathResolver.resolve(null, multiCp, false);
+        assertEquals(2, jars3.size());
+
+        // 4. Maven coordinate in classpath
+        List<File> jars4 = AuxiliaryClasspathResolver.resolve(null, "org.ow2.asm:asm:9.7", false);
+        assertNotNull(jars4);
+        assertFalse(jars4.isEmpty());
+        assertTrue(jars4.get(0).getName().startsWith("asm-9.7"));
     }
 
     @Test

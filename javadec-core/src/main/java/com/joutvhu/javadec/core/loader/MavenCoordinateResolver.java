@@ -149,12 +149,20 @@ public class MavenCoordinateResolver {
                                             } catch (Exception ignored) {
                                                 try { Files.deleteIfExists(partSourcesPath); } catch (Exception ignored2) {}
                                             }
+                                        } else {
+                                            try {
+                                                res.body().close();
+                                            } catch (Exception ignored) {}
                                         }
                                     });
                         }
                     } catch (Exception ignored) {}
 
                     break;
+                } else {
+                    try {
+                        response.body().close();
+                    } catch (Exception ignored) {}
                 }
             } catch (Exception ignored) {
                 // Try next repository

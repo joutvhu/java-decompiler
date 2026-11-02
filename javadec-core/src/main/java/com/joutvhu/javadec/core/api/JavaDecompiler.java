@@ -640,7 +640,9 @@ public class JavaDecompiler {
                 }
             }
 
-            matchedMethods.add(methodBlock);
+            if (!hasParamHint) {
+                matchedMethods.add(methodBlock);
+            }
         }
 
         if (matchedMethods.isEmpty()) {

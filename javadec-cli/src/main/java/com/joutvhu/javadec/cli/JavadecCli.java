@@ -447,6 +447,11 @@ public class JavadecCli implements Callable<Integer> {
                     System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec callees " + target + " com/example/MyClass.class");
+                    return 1;
+                }
                 byte[] bytes = Files.readAllBytes(file.toPath());
                 result = decompiler.getCallees(bytes, method, limit);
             }
@@ -480,6 +485,11 @@ public class JavadecCli implements Callable<Integer> {
                 File file = spec.standaloneFile();
                 if (file == null || !file.exists()) {
                     System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec deps " + target + " com/example/MyClass.class");
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());
@@ -545,18 +555,23 @@ public class JavadecCli implements Callable<Integer> {
             String resolvedTarget = target;
             int targetLine = -1;
 
-            if (lineArg != null && !lineArg.isBlank()) {
-                if (lineArg.contains(":")) {
-                    resolvedTarget = target + "!" + lineArg.substring(0, lineArg.indexOf(':'));
-                    targetLine = Integer.parseInt(lineArg.substring(lineArg.indexOf(':') + 1));
-                } else {
-                    targetLine = Integer.parseInt(lineArg);
+            try {
+                if (lineArg != null && !lineArg.isBlank()) {
+                    if (lineArg.contains(":")) {
+                        resolvedTarget = target + "!" + lineArg.substring(0, lineArg.indexOf(':'));
+                        targetLine = Integer.parseInt(lineArg.substring(lineArg.indexOf(':') + 1));
+                    } else {
+                        targetLine = Integer.parseInt(lineArg);
+                    }
+                } else if (target != null && target.contains(":")) {
+                    int colonIdx = target.lastIndexOf(':');
+                    String suffix = target.substring(colonIdx + 1);
+                    if (suffix.matches("\\d+")) {
+                        targetLine = Integer.parseInt(suffix);
+                        resolvedTarget = target.substring(0, colonIdx);
+                    }
                 }
-            } else if (target.contains(":")) {
-                int colonIdx = target.lastIndexOf(':');
-                targetLine = Integer.parseInt(target.substring(colonIdx + 1));
-                resolvedTarget = target.substring(0, colonIdx);
-            }
+            } catch (NumberFormatException ignored) {}
 
             if (targetLine <= 0) {
                 System.err.println("Error: Please provide a valid 1-based line number (e.g. javadec trace <target> 45)");
@@ -723,6 +738,11 @@ public class JavadecCli implements Callable<Integer> {
                     System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
                     return 1;
                 }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec metrics " + target + " com/example/MyClass.class");
+                    return 1;
+                }
                 byte[] bytes = Files.readAllBytes(file.toPath());
                 result = decompiler.extractMetrics(bytes, method);
             }
@@ -756,6 +776,11 @@ public class JavadecCli implements Callable<Integer> {
                 File file = spec.standaloneFile();
                 if (file == null || !file.exists()) {
                     System.err.println("Error: File not found: " + (file != null ? file.getPath() : target));
+                    return 1;
+                }
+                if (isArchiveFile(file)) {
+                    System.err.println("Error: '" + target + "' is an archive. Please specify a class inside the archive:");
+                    System.err.println("  Example: javadec hierarchy " + target + " com/example/MyClass.class");
                     return 1;
                 }
                 byte[] bytes = Files.readAllBytes(file.toPath());

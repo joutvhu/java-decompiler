@@ -23,6 +23,7 @@ public class StackTraceContextExtractor {
 
         // 1. Inspect bytecode via ASM to discover exact containing method for targetLine
         AtomicReference<String> discoveredMethod = new AtomicReference<>(null);
+        AtomicReference<String> discoveredClassName = new AtomicReference<>(null);
         try {
             byte[] bytecode = (archiveFile != null)
                     ? ZipBytecodeLoader.loadClassBytes(archiveFile, classPath)
@@ -38,6 +39,13 @@ public class StackTraceContextExtractor {
                 }
                 ClassReader cr = new ClassReader(compatible);
                 cr.accept(new ClassVisitor(Opcodes.ASM9) {
+                    @Override
+                    public void visit(int version, int access, String name, String signature, String superName, String[] interfaces) {
+                        if (name != null) {
+                            discoveredClassName.set(name.replace('/', '.'));
+                        }
+                    }
+
                     @Override
                     public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
                         return new MethodVisitor(Opcodes.ASM9) {
@@ -97,7 +105,9 @@ public class StackTraceContextExtractor {
         }
 
         StringBuilder sb = new StringBuilder();
-        String className = classPath.replace('\\', '/').replaceAll("^/+", "").replaceAll("\\.class$", "").replace('/', '.');
+        String className = discoveredClassName.get() != null
+                ? discoveredClassName.get()
+                : classPath.replace('\\', '/').replaceAll("^/+", "").replaceAll("\\.class$", "").replace('/', '.');
         sb.append("// Context for ").append(className);
         if (discoveredMethod.get() != null) {
             sb.append(".").append(discoveredMethod.get());

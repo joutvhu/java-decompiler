@@ -210,4 +210,24 @@ public class MethodExtractorTest {
         assertNotNull(extractedClinit);
         assertTrue(extractedClinit.contains("System.loadLibrary(\"native\");"));
     }
+
+    @Test
+    public void testExtractNonMatchingParameterHintReturnsNotFound() {
+        String code = """
+                package com.example;
+                public class Service {
+                    public void save(String id) {
+                        System.out.println(id);
+                    }
+                    public void save(int timeout) {
+                        System.out.println(timeout);
+                    }
+                }
+                """;
+
+        String result = decompiler.extractMethodFromSource(code, "save(double)");
+        assertNotNull(result);
+        assertTrue(result.contains("not found in decompiled source"), "Should report not found for non-matching signature");
+        assertFalse(result.contains("System.out.println"), "Should not return non-matching overloads");
+    }
 }

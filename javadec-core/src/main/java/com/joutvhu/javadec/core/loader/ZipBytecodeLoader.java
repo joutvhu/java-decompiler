@@ -453,13 +453,18 @@ public class ZipBytecodeLoader {
                 return res;
             }
 
-            if (entry.getSize() > 10 * 1024 * 1024) {
+            int maxBytes = 10 * 1024 * 1024;
+            if (entry.getSize() > maxBytes) {
                 return String.format("// [Resource '%s' is too large (%d bytes). Please specify line offset/limit or use extract_archive to save to disk.]", normalized, entry.getSize());
             }
 
             String fullText;
             try (InputStream is = zipFile.getInputStream(entry)) {
-                fullText = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                byte[] bytes = is.readNBytes(maxBytes + 1);
+                if (bytes.length > maxBytes) {
+                    return String.format("// [Resource '%s' is too large (> 10MB). Please specify line offset/limit or use extract_archive to save to disk.]", normalized);
+                }
+                fullText = new String(bytes, StandardCharsets.UTF_8);
                 if (fullText.startsWith("\uFEFF")) {
                     fullText = fullText.substring(1);
                 }

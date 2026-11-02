@@ -294,5 +294,33 @@ public class JavadecCliTest {
         // Passing JAR directly to outline without a class must fail gracefully with exit code 1
         int code2 = cmd.execute("outline", refJar.getAbsolutePath());
         assertEquals(1, code2);
+
+        // Passing JAR directly to callees without a class must fail gracefully with exit code 1
+        int code3 = cmd.execute("callees", refJar.getAbsolutePath());
+        assertEquals(1, code3);
+
+        // Passing JAR directly to deps without a class must fail gracefully with exit code 1
+        int code4 = cmd.execute("deps", refJar.getAbsolutePath());
+        assertEquals(1, code4);
+
+        // Passing JAR directly to metrics without a class must fail gracefully with exit code 1
+        int code5 = cmd.execute("metrics", refJar.getAbsolutePath());
+        assertEquals(1, code5);
+
+        // Passing JAR directly to hierarchy without a class must fail gracefully with exit code 1
+        int code6 = cmd.execute("hierarchy", refJar.getAbsolutePath());
+        assertEquals(1, code6);
+    }
+
+    @Test
+    public void testTraceErrorHandlingWithoutLineNumber() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+
+        // Target with Windows drive letter or GAV but no line number must return 1 without crashing
+        int code1 = cmd.execute("trace", "C:\\nonexistent\\SampleService.class");
+        assertEquals(1, code1);
+
+        int code2 = cmd.execute("trace", "org.example:demo:1.0.0");
+        assertEquals(1, code2);
     }
 }
