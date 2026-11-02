@@ -31,9 +31,12 @@ import java.util.concurrent.Callable;
                 JavadecCli.DisasmCommand.class,
                 JavadecCli.ResourceCommand.class,
                 JavadecCli.FindCommand.class,
+                JavadecCli.CalleesCommand.class,
+                JavadecCli.DepsCommand.class,
                 JavadecCli.StringsCommand.class,
                 JavadecCli.TraceCommand.class,
                 JavadecCli.DiffCommand.class,
+                JavadecCli.ManifestCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -358,6 +361,94 @@ public class JavadecCli implements Callable<Integer> {
         }
     }
 
+    @Command(name = "callees", aliases = {"calls", "outgoing"}, description = "Extract outgoing method calls (callees) called from within a class or method")
+    static class CalleesCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> or GAV")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
+        @Option(names = {"-m", "--method"}, description = "Optional method name to inspect exclusively")
+        private String method;
+
+        @Option(names = {"-l", "--limit"}, description = "Maximum number of outgoing calls to return (default: 200)")
+        private Integer limit;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            CalleeResult result;
+
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                result = decompiler.getArchiveCallees(jar, resolvedTarget.substring(bangIdx + 1), method, limit);
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.getCallees(bytes, method, limit);
+            }
+
+            System.out.println(result.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "deps", aliases = {"dependencies", "imports"}, description = "Analyze and categorize dependencies and imported classes (JDK, internal, third-party)")
+    static class DepsCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> or GAV")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            DependencyAnalysisResult result;
+
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                result = decompiler.analyzeArchiveDependencies(jar, resolvedTarget.substring(bangIdx + 1));
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.analyzeDependencies(bytes);
+            }
+
+            System.out.println(result.formattedReport());
+            return 0;
+        }
+    }
+
     @Command(name = "strings", aliases = {"constants"}, description = "Extract hardcoded string constants (URLs, SQL, tokens, error messages) from an archive or class")
     static class StringsCommand implements Callable<Integer> {
         @Parameters(index = "0", description = "Path to .jar, .class, or GAV coordinate")
@@ -485,6 +576,26 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             JarApiDiffResult diff = decompiler.compareJarApis(jar1, jar2, pathFilter, breakingOnly);
             System.out.println(diff.formattedReport());
+            return 0;
+        }
+    }
+
+    @Command(name = "manifest", description = "Inspect structured packaging metadata, MANIFEST.MF attributes, and SPI services of an archive")
+    static class ManifestCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar or .zip archive or Maven GAV")
+        private String target;
+
+        @Override
+        public Integer call() throws Exception {
+            File jar = PathUtil.resolveFile(target);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ManifestSummary summary = decompiler.inspectManifest(jar);
+            System.out.println(summary.formattedSummary());
             return 0;
         }
     }

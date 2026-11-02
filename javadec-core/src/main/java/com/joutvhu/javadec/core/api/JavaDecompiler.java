@@ -3,10 +3,13 @@ package com.joutvhu.javadec.core.api;
 import com.joutvhu.javadec.core.diff.JarApiDiffEngine;
 import com.joutvhu.javadec.core.disasm.BytecodeDisassembler;
 import com.joutvhu.javadec.core.engine.CfrDecompilerEngine;
+import com.joutvhu.javadec.core.loader.ManifestInspector;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.*;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
 import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
+import com.joutvhu.javadec.core.scanner.CalleeScanner;
+import com.joutvhu.javadec.core.scanner.ClassDependencyAnalyzer;
 import com.joutvhu.javadec.core.scanner.ConstantStringExtractor;
 import com.joutvhu.javadec.core.stack.StackTraceContextExtractor;
 
@@ -110,6 +113,37 @@ public class JavaDecompiler {
      */
     public JarApiDiffResult compareJarApis(File jar1, File jar2, String packageFilter, boolean breakingOnly) throws IOException {
         return JarApiDiffEngine.compare(jar1, jar2, packageFilter, breakingOnly);
+    }
+
+    /**
+     * Extracts outgoing method calls (callees) called from within a class or method.
+     */
+    public CalleeResult getCallees(byte[] bytecode, String filterMethod, Integer limit) {
+        return CalleeScanner.scan(bytecode, filterMethod, limit);
+    }
+
+    public CalleeResult getArchiveCallees(File archiveFile, String classPath, String filterMethod, Integer limit) throws IOException {
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
+        return getCallees(bytes, filterMethod, limit);
+    }
+
+    /**
+     * Analyzes and categorizes all dependencies and imported classes referenced by a class.
+     */
+    public DependencyAnalysisResult analyzeDependencies(byte[] bytecode) {
+        return ClassDependencyAnalyzer.analyze(bytecode);
+    }
+
+    public DependencyAnalysisResult analyzeArchiveDependencies(File archiveFile, String classPath) throws IOException {
+        byte[] bytes = ZipBytecodeLoader.loadClassBytes(archiveFile, classPath);
+        return analyzeDependencies(bytes);
+    }
+
+    /**
+     * Inspects structured packaging metadata, MANIFEST.MF attributes, and SPI services of an archive.
+     */
+    public ManifestSummary inspectManifest(File archiveFile) throws Exception {
+        return ManifestInspector.inspect(archiveFile);
     }
 
     /**

@@ -15,6 +15,7 @@ import java.io.FileNotFoundException;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -520,6 +521,101 @@ public class JavadecMcpServer {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("get_callees")
+                                .description("Extract outgoing method calls (callees) called from within a class or specific method")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> or GAV"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "methodName", Map.of("type", "string", "description", "Optional method name to inspect exclusively"),
+                                                "limit", Map.of("type", "integer", "description", "Optional maximum number of calls to return (default: 200)")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                String methodName = (String) request.arguments().get("methodName");
+                                Integer limit = request.arguments().get("limit") instanceof Number n ? n.intValue() : 200;
+
+                                CalleeResult result;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.getArchiveCallees(jar, target.substring(bangIdx + 1), methodName, limit);
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    result = DECOMPILER.getCallees(bytes, methodName, limit);
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("analyze_dependencies")
+                                .description("Analyze and categorize all imported classes and packages referenced by a class (JDK, internal, third-party)")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> or GAV"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
+                                                "lineOffset", Map.of("type", "integer", "description", "Optional start line offset"),
+                                                "lineLimit", Map.of("type", "integer", "description", "Optional line count limit")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                DependencyAnalysisResult result;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.analyzeArchiveDependencies(jar, target.substring(bangIdx + 1));
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    result = DECOMPILER.analyzeDependencies(bytes);
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedReport())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("extract_jar_strings")
                                 .description("Extract hardcoded string constants (URLs, SQL, tokens, error messages) directly from bytecode without decompilation")
                                 .inputSchema(Map.of(
@@ -646,6 +742,38 @@ public class JavadecMcpServer {
                                 JarApiDiffResult diff = DECOMPILER.compareJarApis(jar1, jar2, packageFilter, breakingOnly);
                                 return McpSchema.CallToolResult.builder()
                                         .content(List.of(new McpSchema.TextContent(diff.formattedReport())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("inspect_manifest")
+                                .description("Inspect structured packaging metadata, MANIFEST.MF attributes, and SPI services of an archive")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive or Maven GAV coordinate")
+                                        ),
+                                        "required", List.of("jarPath")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+                                ManifestSummary summary = DECOMPILER.inspectManifest(jar);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(summary.formattedSummary())))
                                         .isError(false)
                                         .build();
                             } catch (Exception e) {

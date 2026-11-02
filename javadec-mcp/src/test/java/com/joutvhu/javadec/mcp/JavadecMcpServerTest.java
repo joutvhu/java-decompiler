@@ -168,4 +168,34 @@ public class JavadecMcpServerTest {
             assertNotNull(res.formattedReport());
         });
     }
+
+    @Test
+    public void testGetCalleesExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.getArchiveCallees(refJar, "com/joutvhu/javadec/test/SampleService.class", "main", 10);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
+
+    @Test
+    public void testAnalyzeDependenciesExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.analyzeArchiveDependencies(refJar, "com/joutvhu/javadec/test/SampleService.class");
+            assertNotNull(res);
+            assertNotNull(res.formattedReport());
+        });
+    }
+
+    @Test
+    public void testInspectManifestExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.inspectManifest(refJar);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
 }
