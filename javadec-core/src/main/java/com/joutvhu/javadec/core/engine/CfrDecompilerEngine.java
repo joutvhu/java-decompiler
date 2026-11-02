@@ -60,7 +60,7 @@ public class CfrDecompilerEngine implements DecompilerEngine {
         cfrOptions.put("hideutf", "false"); // Preserve native UTF-8 characters (Vietnamese diacritics, Asian scripts, emoji) instead of unicode escape sequences
         if (options != null) {
             if (options.showLineNumbers()) {
-                cfrOptions.put("forceprintpages", "true");
+                cfrOptions.put("trackbytecodeloc", "true");
             }
             if (options.includeSyntheticMembers()) {
                 cfrOptions.put("removeinnerclasssynthetics", "false");
@@ -87,7 +87,8 @@ public class CfrDecompilerEngine implements DecompilerEngine {
                 .build();
 
         driver.analyse(Collections.singletonList(classPath));
-        return sinkFactory.getOutput();
+        boolean annotateLines = options != null && options.showLineNumbers();
+        return sinkFactory.getOutput(annotateLines);
     }
 
     private static class MemoryClassFileSource implements ClassFileSource {
@@ -184,9 +185,13 @@ public class CfrDecompilerEngine implements DecompilerEngine {
 
     private static class MemoryOutputSinkFactory implements OutputSinkFactory {
         private final StringBuilder output = new StringBuilder();
+        private final List<com.joutvhu.javadec.engine.api.SinkReturns.LineNumberMapping> lineMappings = new ArrayList<>();
 
         @Override
         public List<SinkClass> getSupportedSinks(SinkType sinkType, Collection<SinkClass> available) {
+            if (sinkType == SinkType.LINENUMBER && available.contains(SinkClass.LINE_NUMBER_MAPPING)) {
+                return Collections.singletonList(SinkClass.LINE_NUMBER_MAPPING);
+            }
             return Collections.singletonList(SinkClass.STRING);
         }
 
@@ -196,11 +201,55 @@ public class CfrDecompilerEngine implements DecompilerEngine {
             if (sinkType == SinkType.JAVA && sinkClass == SinkClass.STRING) {
                 return (Sink<T>) (Sink<String>) output::append;
             }
+            if (sinkType == SinkType.LINENUMBER && sinkClass == SinkClass.LINE_NUMBER_MAPPING) {
+                return (Sink<T>) (Sink<com.joutvhu.javadec.engine.api.SinkReturns.LineNumberMapping>) lineMappings::add;
+            }
             return ignored -> {};
         }
 
-        public String getOutput() {
-            return output.toString();
+        public String getOutput(boolean annotateLineNumbers) {
+            if (!annotateLineNumbers || lineMappings.isEmpty()) {
+                return output.toString();
+            }
+
+            Map<Integer, Integer> decompToSrc = new TreeMap<>();
+            for (var mapping : lineMappings) {
+                var bytecodeLocs = mapping.getMappings();
+                var classFileLocs = mapping.getClassFileMappings();
+                if (bytecodeLocs != null && classFileLocs != null) {
+                    for (Map.Entry<Integer, Integer> entry : bytecodeLocs.entrySet()) {
+                        int bcOffset = entry.getKey();
+                        int decompLine = entry.getValue();
+                        Integer srcLine = classFileLocs.get(bcOffset);
+                        if (srcLine == null) {
+                            var floorEntry = classFileLocs.floorEntry(bcOffset);
+                            if (floorEntry != null) srcLine = floorEntry.getValue();
+                        }
+                        if (srcLine != null && srcLine > 0) {
+                            decompToSrc.putIfAbsent(decompLine, srcLine);
+                        }
+                    }
+                }
+            }
+
+            if (decompToSrc.isEmpty()) {
+                return output.toString();
+            }
+
+            String[] lines = output.toString().split("\r?\n", -1);
+            StringBuilder annotated = new StringBuilder();
+            for (int i = 0; i < lines.length; i++) {
+                int lineNum = i + 1;
+                Integer srcLine = decompToSrc.get(lineNum);
+                if (srcLine != null) {
+                    annotated.append("/* line ").append(srcLine).append(" */ ");
+                }
+                annotated.append(lines[i]);
+                if (i < lines.length - 1) {
+                    annotated.append("\n");
+                }
+            }
+            return annotated.toString();
         }
     }
 }

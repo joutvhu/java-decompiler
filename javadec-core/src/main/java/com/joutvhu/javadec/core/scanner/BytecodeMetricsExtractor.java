@@ -54,6 +54,7 @@ public class BytecodeMetricsExtractor {
                 return new MethodVisitor(Opcodes.ASM9) {
                     private int instructionCount = 0;
                     private int tryCatchCount = 0;
+                    private boolean maxsVisited = false;
 
                     @Override
                     public void visitInsn(int opcode) { instructionCount++; }
@@ -89,8 +90,16 @@ public class BytecodeMetricsExtractor {
 
                     @Override
                     public void visitMaxs(int maxStack, int maxLocals) {
+                        maxsVisited = true;
                         boolean isLarge = instructionCount > 2000;
                         items.add(new MethodMetricsItem(methodName, methodDesc, instructionCount, maxStack, maxLocals, tryCatchCount, isLarge));
+                    }
+
+                    @Override
+                    public void visitEnd() {
+                        if (!maxsVisited) {
+                            items.add(new MethodMetricsItem(methodName, methodDesc, 0, 0, 0, 0, false));
+                        }
                     }
                 };
             }

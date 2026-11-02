@@ -110,9 +110,10 @@ public class ClassDependencyAnalyzer {
                 continue;
             }
 
-            if (dotted.startsWith("java.") || dotted.startsWith("javax.")) {
+            if (dotted.startsWith("java.") || dotted.startsWith("javax.") || dotted.startsWith("jdk.")
+                    || dotted.startsWith("org.w3c.dom.") || dotted.startsWith("org.xml.sax.")) {
                 jdk.add(dotted);
-            } else if (!basePkg.isEmpty() && dotted.startsWith(basePkg)) {
+            } else if (!basePkg.isEmpty() && (dotted.startsWith(basePkg + ".") || dotted.equals(basePkg))) {
                 internal.add(dotted);
             } else {
                 thirdParty.add(dotted);

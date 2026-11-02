@@ -56,7 +56,8 @@ public class JavadecMcpServer {
     static boolean isArchiveFile(String path) {
         if (path == null) return false;
         String lower = path.toLowerCase();
-        return lower.endsWith(".jar") || lower.endsWith(".zip") || lower.endsWith(".war") || lower.endsWith(".ear");
+        return lower.endsWith(".jar") || lower.endsWith(".zip") || lower.endsWith(".war") || lower.endsWith(".ear")
+                || com.joutvhu.javadec.core.loader.MavenCoordinateResolver.isMavenCoordinate(path);
     }
 
     static String resolveTarget(Map<String, Object> arguments) {

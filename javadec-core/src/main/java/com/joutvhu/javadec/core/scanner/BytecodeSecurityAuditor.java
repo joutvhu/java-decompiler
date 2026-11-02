@@ -196,6 +196,7 @@ public class BytecodeSecurityAuditor {
                                 ));
                             }
                         }
+                        this.lastLdcValue = null;
                     }
                 };
             }
@@ -204,12 +205,12 @@ public class BytecodeSecurityAuditor {
 
     private static boolean isWeakDigest(String alg) {
         String u = alg.toUpperCase();
-        return u.equals("MD5") || u.equals("MD2") || u.equals("MD4") || u.equals("SHA-1") || u.equals("SHA1");
+        return u.equals("MD5") || u.equals("MD2") || u.equals("MD4") || u.equals("SHA-1") || u.equals("SHA1") || u.equals("SHA");
     }
 
     private static boolean isWeakCipher(String alg) {
         String u = alg.toUpperCase();
         return u.startsWith("DES/") || u.equals("DES") || u.startsWith("DESEDE") || u.startsWith("RC4") || u.startsWith("RC2")
-                || u.startsWith("BLOWFISH") || u.contains("/ECB/");
+                || u.startsWith("BLOWFISH") || u.contains("/ECB/") || u.endsWith("/ECB") || u.equals("ECB");
     }
 }

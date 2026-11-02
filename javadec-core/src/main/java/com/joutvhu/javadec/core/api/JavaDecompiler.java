@@ -246,8 +246,8 @@ public class JavaDecompiler {
                 String name = entry.getName();
                 if (entry.isDirectory()) continue;
 
-                // Strip Spring Boot / WAR prefixes if present
-                String cleanName = name;
+                // Strip Spring Boot / WAR prefixes if present, and normalize slashes
+                String cleanName = name.replace('\\', '/').replaceAll("^/+", "");
                 if (cleanName.startsWith("BOOT-INF/classes/")) {
                     cleanName = cleanName.substring("BOOT-INF/classes/".length());
                 } else if (cleanName.startsWith("WEB-INF/classes/")) {

@@ -2,11 +2,13 @@ package com.joutvhu.javadec.core.stack;
 
 import com.joutvhu.javadec.core.api.DecompileOptions;
 import com.joutvhu.javadec.core.api.JavaDecompiler;
+import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.StackTraceSnippetResult;
 import org.objectweb.asm.*;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -19,7 +21,39 @@ public class StackTraceContextExtractor {
     public static StackTraceSnippetResult extract(JavaDecompiler decompiler, File archiveFile, String classPath, int targetLine, Integer contextLines) throws IOException {
         int radius = (contextLines != null && contextLines > 0) ? contextLines : 3;
 
-        // 1. Decompile full class with line numbers to get exact line mappings
+        // 1. Inspect bytecode via ASM to discover exact containing method for targetLine
+        AtomicReference<String> discoveredMethod = new AtomicReference<>(null);
+        try {
+            byte[] bytecode = (archiveFile != null)
+                    ? ZipBytecodeLoader.loadClassBytes(archiveFile, classPath)
+                    : Files.readAllBytes(new File(classPath).toPath());
+
+            if (bytecode != null && bytecode.length >= 8) {
+                byte[] compatible = bytecode;
+                int majorVersion = ((bytecode[6] & 0xFF) << 8) | (bytecode[7] & 0xFF);
+                if (majorVersion > 65) {
+                    compatible = bytecode.clone();
+                    compatible[6] = 0;
+                    compatible[7] = 65;
+                }
+                ClassReader cr = new ClassReader(compatible);
+                cr.accept(new ClassVisitor(Opcodes.ASM9) {
+                    @Override
+                    public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                        return new MethodVisitor(Opcodes.ASM9) {
+                            @Override
+                            public void visitLineNumber(int line, Label start) {
+                                if (line == targetLine) {
+                                    discoveredMethod.set(name);
+                                }
+                            }
+                        };
+                    }
+                }, ClassReader.SKIP_FRAMES);
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Decompile full class with line numbers to get exact line mappings
         DecompileOptions options = DecompileOptions.builder()
                 .showLineNumbers(true)
                 .build();
@@ -40,18 +74,35 @@ public class StackTraceContextExtractor {
         for (int i = 0; i < lines.length; i++) {
             String l = lines[i];
             if (l.contains(lineTargetPattern1) || l.contains(lineTargetPattern2) || l.contains(lineTargetPattern3)
-                    || l.matches(".*\\/\\*\\s*" + targetLine + "\\s*\\*\\/.*")) {
+                    || l.matches(".*\\/\\*\\s*line\\s*" + targetLine + "\\s*\\*\\/.*")) {
                 matchIdx = i;
                 break;
             }
         }
 
-        // If line number comments were omitted or different, fall back to locating method name via bytecode
-        AtomicReference<String> discoveredMethod = new AtomicReference<>(null);
+        // If not found via line comment, check if source came from companion -sources.jar (1:1 source lines)
+        if (matchIdx < 0 && !decompiled.contains("Decompiled with CFR") && targetLine > 0 && targetLine <= lines.length) {
+            matchIdx = targetLine - 1;
+        }
+
+        // If still not matched, try matching discovered method declaration
+        if (matchIdx < 0 && discoveredMethod.get() != null) {
+            String mName = discoveredMethod.get();
+            for (int i = 0; i < lines.length; i++) {
+                if (lines[i].contains(" " + mName + "(") || lines[i].contains(" " + mName + " (")) {
+                    matchIdx = i;
+                    break;
+                }
+            }
+        }
 
         StringBuilder sb = new StringBuilder();
         String className = classPath.replace('\\', '/').replaceAll("^/+", "").replaceAll("\\.class$", "").replace('/', '.');
-        sb.append("// Context for ").append(className).append(" at line ").append(targetLine).append(":\n\n");
+        sb.append("// Context for ").append(className);
+        if (discoveredMethod.get() != null) {
+            sb.append(".").append(discoveredMethod.get());
+        }
+        sb.append(" at line ").append(targetLine).append(":\n\n");
 
         if (matchIdx >= 0) {
             int start = Math.max(0, matchIdx - radius);

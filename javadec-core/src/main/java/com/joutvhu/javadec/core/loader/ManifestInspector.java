@@ -105,7 +105,7 @@ public class ManifestInspector {
             for (Map.Entry<String, List<String>> entry : spiServices.entrySet()) {
                 sb.append("  ").append(entry.getKey()).append(":\n");
                 for (String prov : entry.getValue()) {
-                    sb.append("    └── ").append(prov).append("\n");
+                    sb.append("    \\-- ").append(prov).append("\n");
                 }
             }
         }

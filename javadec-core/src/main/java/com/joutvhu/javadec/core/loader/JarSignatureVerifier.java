@@ -28,6 +28,7 @@ public class JarSignatureVerifier {
         List<SignerInfo> signers = new ArrayList<>();
         Set<String> seenSigners = new HashSet<>();
         boolean tampered = false;
+        boolean hasUnsignedEntries = false;
 
         try (JarFile jar = new JarFile(jarFile, true)) {
             Enumeration<JarEntry> entries = jar.entries();
@@ -52,7 +53,7 @@ public class JarSignatureVerifier {
 
                     // Collect signers
                     CodeSigner[] codeSigners = entry.getCodeSigners();
-                    if (codeSigners != null) {
+                    if (codeSigners != null && codeSigners.length > 0) {
                         for (CodeSigner cs : codeSigners) {
                             List<? extends Certificate> certs = cs.getSignerCertPath().getCertificates();
                             if (!certs.isEmpty() && certs.get(0) instanceof X509Certificate x509) {
@@ -65,6 +66,8 @@ public class JarSignatureVerifier {
                                 }
                             }
                         }
+                    } else {
+                        hasUnsignedEntries = true;
                     }
                 }
             }
@@ -76,7 +79,11 @@ public class JarSignatureVerifier {
         if (tampered) {
             status = SignatureStatus.TAMPERED;
         } else if (hasSignatureFiles && !signers.isEmpty()) {
-            status = SignatureStatus.SIGNED_VALID;
+            if (hasUnsignedEntries) {
+                status = SignatureStatus.TAMPERED; // Unsigned entries in a signed archive indicate tampering
+            } else {
+                status = SignatureStatus.SIGNED_VALID;
+            }
         } else {
             status = SignatureStatus.UNSIGNED;
         }
@@ -93,7 +100,7 @@ public class JarSignatureVerifier {
                 sb.append("  - Valid Until: ").append(si.validUntil()).append("\n");
             }
         } else if (status == SignatureStatus.TAMPERED) {
-            sb.append("TAMPERED (Signature validation failed! Entry hashes modified or corrupted)\n");
+            sb.append("TAMPERED (Signature validation failed! Entry hashes modified or unsigned entries present in signed archive)\n");
         } else {
             sb.append("UNSIGNED (No signature certificates found)\n");
         }

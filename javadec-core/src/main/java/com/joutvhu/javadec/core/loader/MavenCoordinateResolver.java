@@ -98,8 +98,19 @@ public class MavenCoordinateResolver {
                 if (response.statusCode() == 200) {
                     System.err.println("[javadec] Downloaded " + coordinate + " from " + repo.url());
                     Path targetPath = localM2Jar.toPath();
-                    try (InputStream is = response.body()) {
-                        Files.copy(is, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                    Path partPath = new File(m2RepoDir, jarFileName + ".part-" + System.currentTimeMillis()).toPath();
+                    try {
+                        try (InputStream is = response.body()) {
+                            Files.copy(is, partPath, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        try {
+                            Files.move(partPath, targetPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                        } catch (Exception moveEx) {
+                            Files.move(partPath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                    } catch (Exception copyEx) {
+                        try { Files.deleteIfExists(partPath); } catch (Exception ignoredDel) {}
+                        throw copyEx;
                     }
                     downloaded = true;
 
@@ -116,12 +127,22 @@ public class MavenCoordinateResolver {
                             if (auth != null) {
                                 sourcesReq.header("Authorization", auth);
                             }
+                            Path partSourcesPath = new File(m2RepoDir, sourcesFileName + ".part-" + System.currentTimeMillis()).toPath();
                             HTTP_CLIENT.sendAsync(sourcesReq.build(), HttpResponse.BodyHandlers.ofInputStream())
                                     .thenAccept(res -> {
                                         if (res.statusCode() == 200) {
-                                            try (InputStream sis = res.body()) {
-                                                Files.copy(sis, localSourcesJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                                            } catch (Exception ignored) {}
+                                            try {
+                                                try (InputStream sis = res.body()) {
+                                                    Files.copy(sis, partSourcesPath, StandardCopyOption.REPLACE_EXISTING);
+                                                }
+                                                try {
+                                                    Files.move(partSourcesPath, localSourcesJar.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                                                } catch (Exception me) {
+                                                    Files.move(partSourcesPath, localSourcesJar.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                                                }
+                                            } catch (Exception ignored) {
+                                                try { Files.deleteIfExists(partSourcesPath); } catch (Exception ignored2) {}
+                                            }
                                         }
                                     });
                         }

@@ -417,6 +417,42 @@ public class ZipBytecodeLoader {
                 throw new IOException("Resource not found: '" + resourcePath + "' in archive: " + archiveFile.getAbsolutePath());
             }
 
+            if (lineOffset != null || lineLimit != null) {
+                int start = (lineOffset != null && lineOffset > 0) ? lineOffset : 1;
+                int maxCount = (lineLimit != null && lineLimit > 0) ? lineLimit : Integer.MAX_VALUE;
+                int end = (maxCount == Integer.MAX_VALUE) ? Integer.MAX_VALUE : start + maxCount - 1;
+
+                StringBuilder sb = new StringBuilder();
+                int currentLine = 0;
+                try (InputStream is = zipFile.getInputStream(entry);
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        currentLine++;
+                        if (currentLine >= start && currentLine <= end) {
+                            if (currentLine == 1 && line.startsWith("\uFEFF")) {
+                                line = line.substring(1);
+                            }
+                            sb.append(line);
+                            if (currentLine < end) {
+                                sb.append("\n");
+                            }
+                        }
+                        if (currentLine > end) {
+                            break;
+                        }
+                    }
+                }
+                if (currentLine < start) {
+                    return "// Offset line " + lineOffset + " exceeds total line count (" + currentLine + ").";
+                }
+                String res = sb.toString();
+                if (res.endsWith("\n")) {
+                    res = res.substring(0, res.length() - 1);
+                }
+                return res;
+            }
+
             String fullText;
             try (InputStream is = zipFile.getInputStream(entry)) {
                 fullText = new String(is.readAllBytes(), StandardCharsets.UTF_8);
@@ -425,7 +461,7 @@ public class ZipBytecodeLoader {
                 }
             }
 
-            return paginateLines(fullText, lineOffset, lineLimit);
+            return fullText;
         }
     }
 
