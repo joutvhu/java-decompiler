@@ -40,16 +40,9 @@ public class JavadecMcpServer {
             Universal & Token-Efficient Java Bytecode, Resource, and Archive Inspector.
             Use whenever inspecting, reverse-engineering, exploring, decompiling, or exporting Java JAR archives, WARs, or .class files, especially when tracing external library stack traces, inspecting third-party API signatures, finding method/class callers and references, reading archive resources (manifest, YAML, properties), or verifying compiled bytecode.
 
-            ## Token-First Operating Strategy
-            Never decompile an entire JAR or huge class file without inspecting outlines or scoping the tree first. Follow this progressive hierarchy:
-            1. inspect_archive_tree: Scoped hierarchy view of packages, class counts, and key configs before diving in.
-            2. read_jar_resource: Read non-class config files (.yml, .properties, .xml, MANIFEST.MF) with line pagination (lineOffset, lineLimit).
-            3. get_class_outline: Extract class skeleton/signatures to inspect APIs with minimal token usage (~90% token savings). Always prefer outline first before full decompilation.
-            4. find_references: Instant bytecode scanner to find all callers, field accesses, or class usages with line numbers without decompiling.
-            5. decompile_method: Selectively decompile only a single method and its overloads (with original Javadoc if companion -sources.jar exists).
-            6. decompile_class: Decompile full class source code (auto-resolves -sources.jar for comments/Javadoc, supports lineOffset and lineLimit for large classes).
-            7. export_archive: Decompile entire archive into .java files on disk maintaining package structure.
-            8. extract_archive: Extract raw bytecode or resources to disk.
+            ## Token-First Hierarchy
+            Always prefer minimal-token inspection before full decompilation:
+            inspect_archive_tree -> read_jar_resource -> get_class_outline -> find_references -> decompile_method -> decompile_class -> export_archive / extract_archive
 
             ## Target URI Format
             - Class inside JAR archive: "<path/to/archive.jar>!<internal/package/ClassName.class>" (e.g. "~/.m2/repository/.../spring-core-6.1.0.jar!org/springframework/core/io/Resource.class")
