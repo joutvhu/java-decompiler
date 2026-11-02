@@ -55,7 +55,8 @@ public class PathUtil {
             if (p.equals("$HOME")) {
                 return normalizedHome;
             }
-            if (p.startsWith("%USERPROFILE%/") || p.startsWith("%USERPROFILE%\\")) {
+            String pUpper = p.toUpperCase();
+            if (pUpper.startsWith("%USERPROFILE%/") || pUpper.startsWith("%USERPROFILE%\\")) {
                 return (normalizedHome + "/" + p.substring(14).replace('\\', '/')).replaceAll("/+", "/");
             }
             if (p.equalsIgnoreCase("%USERPROFILE%")) {

@@ -129,4 +129,28 @@ public class AuxiliaryClasspathResolverTest {
         assertTrue(decompiled.contains("BaseEntity"));
         assertTrue(decompiled.contains("getUserIdentifier"));
     }
+
+    @Test
+    public void testResolveBootInfLib(@TempDir Path tempDir) throws Exception {
+        // Create an embedded library jar
+        File embeddedJar = tempDir.resolve("embedded.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(embeddedJar))) {
+            zos.putNextEntry(new ZipEntry("META-INF/MANIFEST.MF"));
+            zos.write("Manifest-Version: 1.0\n".getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+
+        // Create a Spring Boot fat jar containing BOOT-INF/lib/embedded.jar
+        File fatJar = tempDir.resolve("spring-boot-app.jar").toFile();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(fatJar))) {
+            zos.putNextEntry(new ZipEntry("BOOT-INF/lib/embedded.jar"));
+            zos.write(java.nio.file.Files.readAllBytes(embeddedJar.toPath()));
+            zos.closeEntry();
+        }
+
+        List<File> resolved = AuxiliaryClasspathResolver.resolve(fatJar, null, true);
+        assertNotNull(resolved);
+        boolean hasEmbedded = resolved.stream().anyMatch(f -> f.getName().equals("embedded.jar"));
+        assertTrue(hasEmbedded, "Should resolve embedded libraries from BOOT-INF/lib");
+    }
 }

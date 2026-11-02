@@ -57,7 +57,7 @@ public class AsmClassOutlineExtractor {
             classKind = (classNode.access & Opcodes.ACC_ANNOTATION) != 0 ? "@interface" : "interface";
         } else if ((classNode.access & Opcodes.ACC_ENUM) != 0) {
             classKind = "enum";
-        } else if ((classNode.access & Opcodes.ACC_RECORD) != 0) {
+        } else if ((classNode.access & Opcodes.ACC_RECORD) != 0 || (classNode.recordComponents != null && !classNode.recordComponents.isEmpty()) || "java/lang/Record".equals(classNode.superName)) {
             classKind = "record";
         }
 

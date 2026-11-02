@@ -45,5 +45,7 @@ public class StackTraceContextExtractorTest {
         assertNotNull(res);
         assertNotNull(res.snippet());
         assertTrue(res.snippet().contains("PaymentService"));
+        assertEquals("charge", res.methodName());
+        assertTrue(res.snippet().contains(">>>"), "Snippet should contain highlighted marker >>>");
     }
 }

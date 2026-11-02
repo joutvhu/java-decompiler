@@ -95,12 +95,31 @@ public class AuxiliaryClasspathResolver {
         // B. Check for embedded META-INF/maven/**/pom.xml inside the JAR
         try (ZipFile zip = new ZipFile(primaryJar)) {
             Enumeration<? extends ZipEntry> entries = zip.entries();
+            File tempLibDir = null;
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
                 if (name.startsWith("META-INF/maven/") && name.endsWith("/pom.xml")) {
                     try (InputStream is = zip.getInputStream(entry)) {
                         parsePomStreamAndCollectJars(is, localRepo, result);
+                    } catch (Exception ignored) {}
+                } else if ((name.startsWith("BOOT-INF/lib/") || name.startsWith("WEB-INF/lib/")) && name.endsWith(".jar") && !entry.isDirectory()) {
+                    // C. Extract embedded libraries from BOOT-INF/lib or WEB-INF/lib to a temp directory
+                    try {
+                        if (tempLibDir == null) {
+                            tempLibDir = Files.createTempDirectory("javadec-aux-" + primaryJar.getName() + "-").toFile();
+                            tempLibDir.deleteOnExit();
+                        }
+                        String jarName = name.substring(name.lastIndexOf('/') + 1);
+                        File tempJar = new File(tempLibDir, jarName);
+                        tempJar.deleteOnExit();
+                        if (!tempJar.exists()) {
+                            try (InputStream is = zip.getInputStream(entry);
+                                 OutputStream os = Files.newOutputStream(tempJar.toPath())) {
+                                is.transferTo(os);
+                            }
+                        }
+                        result.add(tempJar);
                     } catch (Exception ignored) {}
                 }
             }
