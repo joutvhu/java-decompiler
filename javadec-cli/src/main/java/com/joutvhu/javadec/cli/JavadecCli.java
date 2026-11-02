@@ -30,6 +30,7 @@ import java.util.concurrent.Callable;
                 JavadecCli.ViewCommand.class,
                 JavadecCli.DisasmCommand.class,
                 JavadecCli.ResourceCommand.class,
+                JavadecCli.SearchResCommand.class,
                 JavadecCli.FindCommand.class,
                 JavadecCli.CalleesCommand.class,
                 JavadecCli.DepsCommand.class,
@@ -195,6 +196,9 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
         private boolean showHex;
 
+        @Option(names = {"--relink-const"}, description = "Relink inlined constants back to original static final field names")
+        private boolean relinkConst;
+
         @Option(names = {"-cp", "--classpath"}, description = "Additional classpath (JARs, directory, or Maven GAV)")
         private String classpath;
 
@@ -213,6 +217,7 @@ public class JavadecCli implements Callable<Integer> {
                     .showLineNumbers(showLines)
                     .deobfuscate(deobfuscate)
                     .showHexLiterals(showHex)
+                    .relinkConstants(relinkConst)
                     .extraClasspath(classpath)
                     .autoDetectDependencies(!noDeps)
                     .lineOffset(offset)
@@ -338,6 +343,35 @@ public class JavadecCli implements Callable<Integer> {
             JavaDecompiler decompiler = new JavaDecompiler();
             String content = decompiler.readArchiveResource(jar, resourcePath, offset, limit);
             System.out.println(content);
+            return 0;
+        }
+    }
+
+    @Command(name = "search-res", aliases = {"grep-res", "find-res"}, description = "Search text keywords or patterns across all configuration and resource files in an archive")
+    static class SearchResCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar or .zip archive or Maven GAV")
+        private String target;
+
+        @Parameters(index = "1", description = "Text keyword or pattern to search")
+        private String query;
+
+        @Option(names = {"-l", "--limit"}, description = "Maximum number of matching lines to return (default: 100)")
+        private Integer limit;
+
+        @Option(names = {"-p", "--path"}, description = "Optional resource path or package filter")
+        private String pathFilter;
+
+        @Override
+        public Integer call() throws Exception {
+            File jar = PathUtil.resolveFile(target);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ResourceSearchResult result = decompiler.searchResources(jar, query, limit, pathFilter);
+            System.out.println(result.formattedSummary());
             return 0;
         }
     }
@@ -794,6 +828,9 @@ public class JavadecCli implements Callable<Integer> {
         @Option(names = {"--hex"}, description = "Display integer and bitmask constants in hexadecimal")
         private boolean showHex;
 
+        @Option(names = {"--relink-const"}, description = "Relink inlined constants back to original static final field names")
+        private boolean relinkConst;
+
         @Option(names = {"-cp", "--classpath"}, description = "Additional classpath (JARs, directory, or Maven GAV)")
         private String classpath;
 
@@ -813,6 +850,7 @@ public class JavadecCli implements Callable<Integer> {
                     .showLineNumbers(showLines)
                     .deobfuscate(deobfuscate)
                     .showHexLiterals(showHex)
+                    .relinkConstants(relinkConst)
                     .extraClasspath(classpath)
                     .autoDetectDependencies(!noDeps)
                     .build();

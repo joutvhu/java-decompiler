@@ -57,7 +57,8 @@ Determine which execution mode is available in the current session:
 When `javadec` MCP server is active in the environment, invoke MCP tools directly:
 - `inspect_archive_tree(jarPath, path?, depth?)` — tree inspection with optional sub-path filter and depth limit
 - `read_jar_resource(jarPath, resourcePath, lineOffset?, lineLimit?)` — resource reader with line pagination
-- `list_jar_classes(jarPath, pattern?)` — search classes (supports `com.example` and `com/example`)
+- `search_jar_resources(jarPath, query, limit?, pathFilter?)` — search text keywords/patterns across all config and resource files in-memory
+- `list_jar_classes(jarPath, pattern?, annotation?)` — search classes (supports package, substring, and annotation filters)
 - `get_class_outline(target)` — lightweight skeleton/signatures (~90% token savings)
 - `find_references(jarPath, target, limit?, pathFilter?)` — ultra-fast caller/usage scanner with line numbers
 - `get_callees(target, methodName?, limit?)` — extract outgoing method calls made by a class or method
@@ -81,6 +82,7 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 If MCP tools are not registered, execute CLI commands in the terminal using `javadec` (or `npx -y javadec`):
 - `javadec tree <jarPath> [--path <subPath>] [--depth <n>]`
 - `javadec resource <jarPath> <resourcePath> [--offset <n>] [--limit <n>]`
+- `javadec search-res <jarPath> <query> [-l <limit>] [-p <filter>]` (aliases: `grep-res`, `find-res`)
 - `javadec list <jarPath> [-p <pattern>] [-a <annotation>]`
 - `javadec outline <target>`
 - `javadec find <jarPath> <target> [-l <limit>] [-p <filter>]` (aliases: `refs`, `usages`)
@@ -95,10 +97,10 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec verify <archiveOrGav>` (aliases: `signature`)
 - `javadec audit <archiveOrClass> [--min-severity <level>] [-p <filter>]` (aliases: `security`, `check`)
 - `javadec metrics <target> [-m <method>]` (aliases: `stats`)
-- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
-- `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`
+- `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [--relink-const] [-cp <path>] [--no-deps]`
+- `javadec view <target> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [--relink-const] [-cp <path>] [--no-deps]`
 - `javadec disasm <target> [-m <method>] [--offset <n>] [--limit <n>]` (aliases: `bytecode`, `ops`)
-- `javadec dump <jarPath> -o <outputDir> [-p <filter>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]` (alias: `export`)
+- `javadec dump <jarPath> -o <outputDir> [-p <filter>] [--deobfuscate] [--hex] [--relink-const] [-cp <path>] [--no-deps]` (alias: `export`)
 - `javadec extract <jarPath> -o <outputDir> [-p <filter>]`
 
 *Note on Java Runtime: If the system default Java is older than Java 21, set `JAVADEC_JAVA_PATH` or `JAVADEC_JAVA_HOME` pointing to a JDK 21+ installation when executing CLI commands.*

@@ -232,6 +232,13 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testSearchResCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("search-res", refJar.getAbsolutePath(), "Mock");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

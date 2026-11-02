@@ -1,7 +1,7 @@
 package com.joutvhu.javadec.core.api;
 
 /**
- * Options to configure bytecode decompilation, deobfuscation, formatting, classpath, and source pagination.
+ * Options to configure bytecode decompilation, deobfuscation, formatting, constant relinking, classpath, and source pagination.
  */
 public record DecompileOptions(
         boolean showLineNumbers,
@@ -9,14 +9,31 @@ public record DecompileOptions(
         boolean hideDefaultConstructors,
         boolean deobfuscate,
         boolean showHexLiterals,
+        boolean relinkConstants,        // de-inline inlined constants back to field names
         String extraClasspath,          // user-specified auxiliary classpath
         boolean autoDetectDependencies, // whether to auto-detect dependencies from ~/.m2 and pom.xml
         String preferredEngine,         // "auto", "native"
         Integer lineOffset,             // 1-based start line (null for beginning)
         Integer lineLimit               // max lines to return (null for all remaining lines)
 ) {
+    public DecompileOptions(
+            boolean showLineNumbers,
+            boolean includeSyntheticMembers,
+            boolean hideDefaultConstructors,
+            boolean deobfuscate,
+            boolean showHexLiterals,
+            String extraClasspath,
+            boolean autoDetectDependencies,
+            String preferredEngine,
+            Integer lineOffset,
+            Integer lineLimit
+    ) {
+        this(showLineNumbers, includeSyntheticMembers, hideDefaultConstructors, deobfuscate, showHexLiterals,
+                false, extraClasspath, autoDetectDependencies, preferredEngine, lineOffset, lineLimit);
+    }
+
     public static DecompileOptions defaults() {
-        return new DecompileOptions(false, false, true, false, false, null, true, "auto", null, null);
+        return new DecompileOptions(false, false, true, false, false, false, null, true, "auto", null, null);
     }
 
     public static Builder builder() {
@@ -29,6 +46,7 @@ public record DecompileOptions(
         private boolean hideDefaultConstructors = true;
         private boolean deobfuscate = false;
         private boolean showHexLiterals = false;
+        private boolean relinkConstants = false;
         private String extraClasspath = null;
         private boolean autoDetectDependencies = true;
         private String preferredEngine = "auto";
@@ -60,6 +78,11 @@ public record DecompileOptions(
             return this;
         }
 
+        public Builder relinkConstants(boolean relinkConstants) {
+            this.relinkConstants = relinkConstants;
+            return this;
+        }
+
         public Builder extraClasspath(String extraClasspath) {
             this.extraClasspath = extraClasspath;
             return this;
@@ -87,7 +110,7 @@ public record DecompileOptions(
 
         public DecompileOptions build() {
             return new DecompileOptions(showLineNumbers, includeSyntheticMembers, hideDefaultConstructors,
-                    deobfuscate, showHexLiterals, extraClasspath, autoDetectDependencies, preferredEngine, lineOffset, lineLimit);
+                    deobfuscate, showHexLiterals, relinkConstants, extraClasspath, autoDetectDependencies, preferredEngine, lineOffset, lineLimit);
         }
     }
 }

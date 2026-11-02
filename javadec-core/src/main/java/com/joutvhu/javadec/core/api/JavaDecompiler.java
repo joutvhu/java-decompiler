@@ -3,20 +3,12 @@ package com.joutvhu.javadec.core.api;
 import com.joutvhu.javadec.core.diff.JarApiDiffEngine;
 import com.joutvhu.javadec.core.disasm.BytecodeDisassembler;
 import com.joutvhu.javadec.core.engine.CfrDecompilerEngine;
+import com.joutvhu.javadec.core.loader.JarSignatureVerifier;
 import com.joutvhu.javadec.core.loader.ManifestInspector;
 import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.*;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
-import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
-import com.joutvhu.javadec.core.loader.JarSignatureVerifier;
-import com.joutvhu.javadec.core.model.ClassHierarchyResult;
-import com.joutvhu.javadec.core.model.JarSignatureResult;
-import com.joutvhu.javadec.core.scanner.BytecodeMetricsExtractor;
-import com.joutvhu.javadec.core.scanner.BytecodeSecurityAuditor;
-import com.joutvhu.javadec.core.scanner.CalleeScanner;
-import com.joutvhu.javadec.core.scanner.ClassDependencyAnalyzer;
-import com.joutvhu.javadec.core.scanner.ClassHierarchyResolver;
-import com.joutvhu.javadec.core.scanner.ConstantStringExtractor;
+import com.joutvhu.javadec.core.scanner.*;
 import com.joutvhu.javadec.core.stack.StackTraceContextExtractor;
 
 import java.io.*;
@@ -80,6 +72,17 @@ public class JavaDecompiler {
 
     public String readArchiveResource(File archiveFile, String resourcePath) throws IOException {
         return readArchiveResource(archiveFile, resourcePath, null, null);
+    }
+
+    /**
+     * Searches for a text keyword or pattern across all configuration and resource files in an archive.
+     */
+    public ResourceSearchResult searchResources(File archiveFile, String query, Integer limit, String pathFilter) throws IOException {
+        return ResourceSearchScanner.search(archiveFile, query, limit, pathFilter);
+    }
+
+    public ResourceSearchResult searchResources(File archiveFile, String query) throws IOException {
+        return searchResources(archiveFile, query, 100, null);
     }
 
     /**
@@ -440,6 +443,7 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .relinkConstants(opts.relinkConstants())
                 .extraClasspath(opts.extraClasspath())
                 .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())
@@ -461,6 +465,7 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .relinkConstants(opts.relinkConstants())
                 .extraClasspath(opts.extraClasspath())
                 .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())
@@ -482,6 +487,7 @@ public class JavaDecompiler {
                 .hideDefaultConstructors(opts.hideDefaultConstructors())
                 .deobfuscate(opts.deobfuscate())
                 .showHexLiterals(opts.showHexLiterals())
+                .relinkConstants(opts.relinkConstants())
                 .extraClasspath(opts.extraClasspath())
                 .autoDetectDependencies(opts.autoDetectDependencies())
                 .preferredEngine(opts.preferredEngine())

@@ -73,6 +73,10 @@ public class CfrDecompilerEngine implements DecompilerEngine {
             if (options.showHexLiterals()) {
                 cfrOptions.put("sugarretrieval", "true");
             }
+            if (options.relinkConstants()) {
+                cfrOptions.put("relinkconst", "true");
+                cfrOptions.put("relinkconststring", "true");
+            }
         }
 
         CfrDriver driver = new CfrDriver.Builder()

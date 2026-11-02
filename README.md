@@ -285,6 +285,7 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | :--- | :--- | :--- |
 | **`inspect_archive_tree`** | `jarPath` (req), `path` (opt), `depth` (opt) | Returns a compact tree structure with total class/resource counts. |
 | **`read_jar_resource`** | `jarPath` (req), `resourcePath` (req), `lineOffset` (opt), `lineLimit` (opt) | Reads non-class text resources (`.yml`, `.properties`, `.xml`, `MANIFEST.MF`) with pagination. |
+| **`search_jar_resources`** | `jarPath` (req), `query` (req), `limit` (opt), `pathFilter` (opt) | Searches text keywords/patterns across all config and resource files in-memory. |
 | **`list_jar_classes`** | `jarPath` (req), `pattern` (opt) | Lists classes matching a package or substring pattern. |
 | **`get_class_outline`** | `target` (req), or (`jarPath` + `classPath`) | Extracts class skeleton/signatures without method bodies (~90% token savings). |
 | **`find_references`** | `jarPath` (req), `target` (req), `limit` (opt), `pathFilter` (opt) | Finds all callers, field accesses, or class usages directly from bytecode with line numbers. |

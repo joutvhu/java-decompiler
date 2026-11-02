@@ -247,4 +247,14 @@ public class JavadecMcpServerTest {
             assertNotNull(res.formattedSummary());
         });
     }
+
+    @Test
+    public void testSearchJarResourcesExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.searchResources(refJar, "Mock", 10, null);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
 }

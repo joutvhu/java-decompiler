@@ -268,6 +268,45 @@ public class JavadecMcpServer {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("search_jar_resources")
+                                .description("Search for text keywords or patterns across all configuration and resource files (.properties, .yml, .xml, .json, etc.) in an archive")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar or .zip archive or Maven GAV coordinate"),
+                                                "query", Map.of("type", "string", "description", "Text keyword or pattern to search across resource files"),
+                                                "limit", Map.of("type", "integer", "description", "Maximum number of matching lines to return (default: 100)"),
+                                                "pathFilter", Map.of("type", "string", "description", "Optional resource path or package filter")
+                                        ),
+                                        "required", List.of("jarPath", "query")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+
+                                String query = (String) request.arguments().get("query");
+                                Integer limit = request.arguments().get("limit") instanceof Number n ? n.intValue() : 100;
+                                String pathFilter = (String) request.arguments().get("pathFilter");
+                                ResourceSearchResult result = DECOMPILER.searchResources(jar, query, limit, pathFilter);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("get_class_outline")
                                 .description("Extract class skeleton/signatures to inspect APIs with minimal token usage")
                                 .inputSchema(Map.of(
@@ -323,6 +362,7 @@ public class JavadecMcpServer {
                                                 "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
                                                 "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
                                                 "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
+                                                "relinkConstants", Map.of("type", "boolean", "description", "Optional flag to relink inlined constants back to field names"),
                                                 "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
                                                 "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
                                         ),
@@ -341,6 +381,7 @@ public class JavadecMcpServer {
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                boolean relinkConst = Boolean.TRUE.equals(request.arguments().get("relinkConstants"));
                                 String classpath = (String) request.arguments().get("classpath");
                                 boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
 
@@ -349,6 +390,7 @@ public class JavadecMcpServer {
                                         .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
+                                        .relinkConstants(relinkConst)
                                         .lineOffset(lineOffset)
                                         .lineLimit(lineLimit)
                                         .build();
@@ -380,17 +422,18 @@ public class JavadecMcpServer {
                                 .description("Selectively decompile only a single method inside a class to optimize AI context tokens with optional line pagination")
                                 .inputSchema(Map.of(
                                         "type", "object",
-                                        "properties", Map.of(
-                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> (supports ~ and $HOME)"),
-                                                "jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)"),
-                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)"),
-                                                "methodName", Map.of("type", "string", "description", "Name of the method to decompile"),
-                                                "classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')"),
-                                                "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
-                                                "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
-                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
-                                                "lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from"),
-                                                "lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read")
+                                        "properties", Map.ofEntries(
+                                                Map.entry("target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> (supports ~ and $HOME)")),
+                                                Map.entry("jarPath", Map.of("type", "string", "description", "Optional archive path (alternative to target URI)")),
+                                                Map.entry("classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)")),
+                                                Map.entry("methodName", Map.of("type", "string", "description", "Name of the method to decompile")),
+                                                Map.entry("classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')")),
+                                                Map.entry("autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)")),
+                                                Map.entry("deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers")),
+                                                Map.entry("showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal")),
+                                                Map.entry("relinkConstants", Map.of("type", "boolean", "description", "Optional flag to relink inlined constants back to field names")),
+                                                Map.entry("lineOffset", Map.of("type", "integer", "description", "Optional 1-based start line number to read from")),
+                                                Map.entry("lineLimit", Map.of("type", "integer", "description", "Optional number of lines to read"))
                                         ),
                                         "required", List.of("methodName"),
                                         "anyOf", List.of(
@@ -409,6 +452,7 @@ public class JavadecMcpServer {
                                 Integer lineLimit = request.arguments().get("lineLimit") instanceof Number n ? n.intValue() : null;
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                boolean relinkConst = Boolean.TRUE.equals(request.arguments().get("relinkConstants"));
                                 String classpath = (String) request.arguments().get("classpath");
                                 boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
 
@@ -417,6 +461,7 @@ public class JavadecMcpServer {
                                         .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
+                                        .relinkConstants(relinkConst)
                                         .lineOffset(lineOffset)
                                         .lineLimit(lineLimit)
                                         .build();
@@ -1010,7 +1055,8 @@ public class JavadecMcpServer {
                                                 "classpath", Map.of("type", "string", "description", "Optional additional classpath (JARs, directory, or Maven GAV separated by ';')"),
                                                 "autoDetectDependencies", Map.of("type", "boolean", "description", "Whether to auto-detect dependencies from ~/.m2 and pom.xml (default: true)"),
                                                 "deobfuscate", Map.of("type", "boolean", "description", "Optional flag to rename illegal or obfuscated identifiers"),
-                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal")
+                                                "showHexLiterals", Map.of("type", "boolean", "description", "Optional flag to format integer/bitmask constants as hexadecimal"),
+                                                "relinkConstants", Map.of("type", "boolean", "description", "Optional flag to relink inlined constants back to field names")
                                         ),
                                         "required", List.of("jarPath", "outputDir")
                                 ))
@@ -1028,6 +1074,7 @@ public class JavadecMcpServer {
                                 String pathFilter = (String) request.arguments().get("pathFilter");
                                 boolean deobfuscate = Boolean.TRUE.equals(request.arguments().get("deobfuscate"));
                                 boolean showHex = Boolean.TRUE.equals(request.arguments().get("showHexLiterals"));
+                                boolean relinkConst = Boolean.TRUE.equals(request.arguments().get("relinkConstants"));
                                 String classpath = (String) request.arguments().get("classpath");
                                 boolean autoDetect = !Boolean.FALSE.equals(request.arguments().get("autoDetectDependencies"));
 
@@ -1036,6 +1083,7 @@ public class JavadecMcpServer {
                                         .autoDetectDependencies(autoDetect)
                                         .deobfuscate(deobfuscate)
                                         .showHexLiterals(showHex)
+                                        .relinkConstants(relinkConst)
                                         .build();
                                 ExportResult result = DECOMPILER.exportArchive(jar, outDir, pathFilter, options);
                                 return McpSchema.CallToolResult.builder()
