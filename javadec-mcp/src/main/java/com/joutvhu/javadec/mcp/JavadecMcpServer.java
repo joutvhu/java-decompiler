@@ -923,6 +923,82 @@ public class JavadecMcpServer {
                 )
                 .toolCall(
                         McpSchema.Tool.builder()
+                                .name("inspect_hierarchy")
+                                .description("Traverse and extract the full inheritance chain (superclasses up to Object) and all implemented interfaces")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "target", Map.of("type", "string", "description", "Path to .class file or <jarPath>!<classPath> or GAV"),
+                                                "jarPath", Map.of("type", "string", "description", "Optional archive path or GAV (alternative to target URI)"),
+                                                "classPath", Map.of("type", "string", "description", "Optional class path inside archive (alternative to target URI)")
+                                        ),
+                                        "anyOf", List.of(
+                                                Map.of("required", List.of("target")),
+                                                Map.of("required", List.of("jarPath", "classPath"))
+                                        )
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String target = resolveTarget(request.arguments());
+                                validateTarget(target);
+
+                                ClassHierarchyResult result;
+                                int bangIdx = target.lastIndexOf('!');
+                                if (bangIdx >= 0) {
+                                    File jar = PathUtil.resolveFile(target.substring(0, bangIdx));
+                                    result = DECOMPILER.getArchiveClassHierarchy(jar, target.substring(bangIdx + 1));
+                                } else {
+                                    File file = PathUtil.resolveFile(target);
+                                    byte[] bytes = Files.readAllBytes(file.toPath());
+                                    result = DECOMPILER.getClassHierarchy(bytes, file.getName());
+                                }
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedHierarchy())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
+                                .name("verify_jar_signature")
+                                .description("Verify digital signature, certificate chain (Issuer/Subject/Validity), and file integrity of a JAR archive")
+                                .inputSchema(Map.of(
+                                        "type", "object",
+                                        "properties", Map.of(
+                                                "jarPath", Map.of("type", "string", "description", "Path to .jar file or Maven GAV coordinate")
+                                        ),
+                                        "required", List.of("jarPath")
+                                ))
+                                .build(),
+                        (exchange, request) -> {
+                            try {
+                                String jarPath = (String) request.arguments().get("jarPath");
+                                File jar = PathUtil.resolveFile(jarPath);
+                                if (!jar.exists()) {
+                                    throw new FileNotFoundException("Archive file not found: " + jarPath);
+                                }
+                                JarSignatureResult result = DECOMPILER.verifyJarSignature(jar);
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent(result.formattedSummary())))
+                                        .isError(false)
+                                        .build();
+                            } catch (Exception e) {
+                                return McpSchema.CallToolResult.builder()
+                                        .content(List.of(new McpSchema.TextContent("Error: " + e.getMessage())))
+                                        .isError(true)
+                                        .build();
+                            }
+                        }
+                )
+                .toolCall(
+                        McpSchema.Tool.builder()
                                 .name("export_archive")
                                 .description("Decompile all (or filtered) classes in an archive into .java files on disk, copying resources and maintaining package structure")
                                 .inputSchema(Map.of(

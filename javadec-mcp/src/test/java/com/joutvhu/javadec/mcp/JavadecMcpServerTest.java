@@ -227,4 +227,24 @@ public class JavadecMcpServerTest {
             assertNotNull(res.formattedSummary());
         });
     }
+
+    @Test
+    public void testInspectHierarchyExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.getArchiveClassHierarchy(refJar, "com/joutvhu/javadec/test/SampleService.class");
+            assertNotNull(res);
+            assertNotNull(res.formattedHierarchy());
+        });
+    }
+
+    @Test
+    public void testVerifyJarSignatureExecution() {
+        com.joutvhu.javadec.core.api.JavaDecompiler decompiler = new com.joutvhu.javadec.core.api.JavaDecompiler();
+        assertDoesNotThrow(() -> {
+            var res = decompiler.verifyJarSignature(refJar);
+            assertNotNull(res);
+            assertNotNull(res.formattedSummary());
+        });
+    }
 }

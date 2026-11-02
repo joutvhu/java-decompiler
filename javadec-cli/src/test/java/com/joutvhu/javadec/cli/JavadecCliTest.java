@@ -218,6 +218,20 @@ public class JavadecCliTest {
     }
 
     @Test
+    public void testHierarchyCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("hierarchy", refJar.getAbsolutePath() + "!com/joutvhu/javadec/test/SampleService.class");
+        assertEquals(0, exitCode);
+    }
+
+    @Test
+    public void testVerifyCommand() {
+        CommandLine cmd = new CommandLine(new JavadecCli());
+        int exitCode = cmd.execute("verify", refJar.getAbsolutePath());
+        assertEquals(0, exitCode);
+    }
+
+    @Test
     public void testErrorHandlingForNonexistentFiles() {
         CommandLine cmd = new CommandLine(new JavadecCli());
 

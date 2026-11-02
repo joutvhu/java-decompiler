@@ -70,6 +70,8 @@ When `javadec` MCP server is active in the environment, invoke MCP tools directl
 - `jar_diff(jar1, jar2, packageFilter?, breakingOnly?)` — compare binary API differences and breaking changes between two JARs or versions
 - `inspect_manifest(jarPath)` — structured packaging metadata, main-class, build JDK, and SPI services
 - `inspect_module(jarPath)` — extract JPMS module declaration (requires, exports, opens, uses, provides)
+- `inspect_hierarchy(target)` — traverse full inheritance chain (superclasses up to Object) and all implemented interfaces
+- `verify_jar_signature(jarPath)` — verify digital signature, certificate chain, and file integrity of a JAR archive
 - `security_audit(jarPath, minSeverity?, pathFilter?)` — audit archive or class bytecode for security vulnerabilities and risky patterns
 - `inspect_metrics(target, methodName?)` — inspect JVM bytecode technical metrics (instruction count, maxStack, maxLocals, try-catch)
 - `export_archive(jarPath, outputDir, pathFilter?)` — decompile entire archive into `.java` files on disk
@@ -89,6 +91,8 @@ If MCP tools are not registered, execute CLI commands in the terminal using `jav
 - `javadec diff <jar1> <jar2> [-p <filter>] [--breaking-only]` (alias: `delta`)
 - `javadec manifest <archiveOrGav>`
 - `javadec module <archiveOrGav>` (aliases: `jpms`)
+- `javadec hierarchy <target>` (aliases: `types`, `tree-class`)
+- `javadec verify <archiveOrGav>` (aliases: `signature`)
 - `javadec audit <archiveOrClass> [--min-severity <level>] [-p <filter>]` (aliases: `security`, `check`)
 - `javadec metrics <target> [-m <method>]` (aliases: `stats`)
 - `javadec view <target> -m <methodName> [--offset <n>] [--limit <n>] [--deobfuscate] [--hex] [-cp <path>] [--no-deps]`

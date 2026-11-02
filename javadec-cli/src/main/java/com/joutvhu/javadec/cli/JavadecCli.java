@@ -40,6 +40,8 @@ import java.util.concurrent.Callable;
                 JavadecCli.ModuleCommand.class,
                 JavadecCli.AuditCommand.class,
                 JavadecCli.MetricsCommand.class,
+                JavadecCli.HierarchyCommand.class,
+                JavadecCli.VerifyCommand.class,
                 JavadecCli.DumpCommand.class,
                 JavadecCli.ExtractCommand.class
         }
@@ -706,6 +708,67 @@ public class JavadecCli implements Callable<Integer> {
                 result = decompiler.extractMetrics(bytes, method);
             }
 
+            System.out.println(result.formattedSummary());
+            return 0;
+        }
+    }
+
+    @Command(name = "hierarchy", aliases = {"types", "tree-class"}, description = "Display full inheritance chain (superclasses up to Object) and all implemented interfaces")
+    static class HierarchyCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .class file or <jarPath>!<classPath> or GAV")
+        private String target;
+
+        @Parameters(index = "1", arity = "0..1", description = "Optional class path inside archive if not using '!'")
+        private String classInJar;
+
+        @Override
+        public Integer call() throws Exception {
+            String resolvedTarget = target;
+            if (classInJar != null && !classInJar.isBlank()) {
+                resolvedTarget = target + "!" + classInJar;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            ClassHierarchyResult result;
+
+            int bangIdx = resolvedTarget.lastIndexOf('!');
+            if (bangIdx >= 0) {
+                File jar = PathUtil.resolveFile(resolvedTarget.substring(0, bangIdx));
+                if (!jar.exists()) {
+                    System.err.println("Error: Archive file not found: " + jar.getPath());
+                    return 1;
+                }
+                result = decompiler.getArchiveClassHierarchy(jar, resolvedTarget.substring(bangIdx + 1));
+            } else {
+                File file = PathUtil.resolveFile(resolvedTarget);
+                if (!file.exists()) {
+                    System.err.println("Error: File not found: " + file.getPath());
+                    return 1;
+                }
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                result = decompiler.getClassHierarchy(bytes, file.getName());
+            }
+
+            System.out.println(result.formattedHierarchy());
+            return 0;
+        }
+    }
+
+    @Command(name = "verify", aliases = {"signature"}, description = "Verify digital signature, certificate chain, and file integrity of a JAR archive")
+    static class VerifyCommand implements Callable<Integer> {
+        @Parameters(index = "0", description = "Path to .jar file or Maven GAV")
+        private String target;
+
+        @Override
+        public Integer call() throws Exception {
+            File jar = PathUtil.resolveFile(target);
+            if (!jar.exists()) {
+                System.err.println("Error: File not found: " + jar.getPath());
+                return 1;
+            }
+
+            JavaDecompiler decompiler = new JavaDecompiler();
+            JarSignatureResult result = decompiler.verifyJarSignature(jar);
             System.out.println(result.formattedSummary());
             return 0;
         }

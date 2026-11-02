@@ -298,6 +298,8 @@ If your default Java is older than JDK 21, specify `JAVADEC_JAVA_HOME` in the `e
 | **`jar_diff`** | `jar1` (req), `jar2` (req), `packageFilter` (opt), `breakingOnly` (opt) | Compares binary public API differences and breaking changes between two JARs or versions. |
 | **`inspect_manifest`** | `jarPath` (req) | Inspects structured packaging metadata, MANIFEST.MF attributes, and SPI services. |
 | **`inspect_module`** | `jarPath` (req) | Extracts JPMS module declaration (requires, exports, opens, uses, provides) from an archive. |
+| **`inspect_hierarchy`** | `target` (req) | Traverses and extracts the full inheritance chain (superclasses up to Object) and all implemented interfaces. |
+| **`verify_jar_signature`** | `jarPath` (req) | Verifies digital signature, certificate chain (Issuer/Subject/Validity), and file integrity of a JAR archive. |
 | **`security_audit`** | `jarPath` (req), `minSeverity` (opt), `pathFilter` (opt) | Audits bytecode for security vulnerabilities (command injection, deserialization, reflection bypass, weak crypto). |
 | **`inspect_metrics`** | `target` (req), `methodName` (opt) | Inspects JVM technical bytecode metrics (instructions count, maxStack, maxLocals, tryCatch blocks). |
 | **`export_archive`** | `jarPath` (req), `outputDir` (req), `pathFilter` (opt), `classpath` (opt) | Decompiles entire archive or package into `.java` files on disk. |

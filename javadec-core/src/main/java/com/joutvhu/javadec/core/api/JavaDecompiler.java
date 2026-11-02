@@ -8,10 +8,14 @@ import com.joutvhu.javadec.core.loader.ZipBytecodeLoader;
 import com.joutvhu.javadec.core.model.*;
 import com.joutvhu.javadec.core.outline.AsmClassOutlineExtractor;
 import com.joutvhu.javadec.core.scanner.BytecodeReferenceScanner;
+import com.joutvhu.javadec.core.loader.JarSignatureVerifier;
+import com.joutvhu.javadec.core.model.ClassHierarchyResult;
+import com.joutvhu.javadec.core.model.JarSignatureResult;
 import com.joutvhu.javadec.core.scanner.BytecodeMetricsExtractor;
 import com.joutvhu.javadec.core.scanner.BytecodeSecurityAuditor;
 import com.joutvhu.javadec.core.scanner.CalleeScanner;
 import com.joutvhu.javadec.core.scanner.ClassDependencyAnalyzer;
+import com.joutvhu.javadec.core.scanner.ClassHierarchyResolver;
 import com.joutvhu.javadec.core.scanner.ConstantStringExtractor;
 import com.joutvhu.javadec.core.stack.StackTraceContextExtractor;
 
@@ -196,6 +200,24 @@ public class JavaDecompiler {
      */
     public int extractArchive(File archiveFile, File targetDir, String pathFilter) throws IOException {
         return ZipBytecodeLoader.extractArchive(archiveFile, targetDir, pathFilter);
+    }
+
+    /**
+     * Resolves the full inheritance chain (superclasses and all implemented interfaces) of a class.
+     */
+    public ClassHierarchyResult getArchiveClassHierarchy(File archiveFile, String classPath) {
+        return ClassHierarchyResolver.resolve(archiveFile, null, classPath);
+    }
+
+    public ClassHierarchyResult getClassHierarchy(byte[] bytecode, String className) {
+        return ClassHierarchyResolver.resolve(null, bytecode, className);
+    }
+
+    /**
+     * Verifies digital signatures, certificates, and entry digests of a JAR archive.
+     */
+    public JarSignatureResult verifyJarSignature(File jarFile) {
+        return JarSignatureVerifier.verify(jarFile);
     }
 
     /**
