@@ -147,6 +147,28 @@ public class MethodExtractorTest {
     }
 
     @Test
+    public void testExtractCompactConstructorOnRecord() {
+        String code = """
+                package com.example;
+                public record Point(int x, int y) {
+                    public Point {
+                        if (x < 0) throw new IllegalArgumentException();
+                    }
+                    public int distance() {
+                        return x * x + y * y;
+                    }
+                }
+                """;
+
+        String extracted = decompiler.extractMethodFromSource(code, "Point");
+        assertNotNull(extracted);
+        assertTrue(extracted.contains("public Point {"));
+        assertTrue(extracted.contains("if (x < 0)"));
+        assertFalse(extracted.contains("public record Point")); // MUST NOT return the record class definition
+        assertFalse(extracted.contains("distance()"));
+    }
+
+    @Test
     public void testExtractInterfaceMethod() {
         String code = """
                 package com.example;

@@ -92,6 +92,27 @@ public class ClassOutlineTest {
     }
 
     @Test
+    public void testEmptyRecordSkeleton() {
+        ClassOutline outline = new ClassOutline(
+                "com/example/EmptyRecord",
+                "com.example",
+                "public final",
+                "record",
+                "java/lang/Record",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                65
+        );
+
+        String skel = outline.toSkeletonSource();
+        assertTrue(skel.contains("public final record EmptyRecord()"));
+    }
+
+    @Test
     public void testEnumSkeleton() {
         ClassOutline outline = new ClassOutline(
                 "com/example/Status",

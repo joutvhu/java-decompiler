@@ -70,14 +70,16 @@ public record ClassOutline(
         boolean isRecord = "record".equals(classKind);
         boolean isEnum = "enum".equals(classKind);
 
-        // Render record components e.g. record User(String name, int age)
-        if (isRecord && recordComponents != null && !recordComponents.isEmpty()) {
+        // Render record components e.g. record User(String name, int age) or record EmptyRecord()
+        if (isRecord) {
             sb.append("(");
-            for (int i = 0; i < recordComponents.size(); i++) {
-                RecordComponentOutline rc = recordComponents.get(i);
-                sb.append(rc.type()).append(" ").append(rc.name());
-                if (i < recordComponents.size() - 1) {
-                    sb.append(", ");
+            if (recordComponents != null) {
+                for (int i = 0; i < recordComponents.size(); i++) {
+                    RecordComponentOutline rc = recordComponents.get(i);
+                    sb.append(rc.type()).append(" ").append(rc.name());
+                    if (i < recordComponents.size() - 1) {
+                        sb.append(", ");
+                    }
                 }
             }
             sb.append(")");

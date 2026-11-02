@@ -353,7 +353,7 @@ public class JavaDecompiler {
             pattern = Pattern.compile("(?m)^[ \\t]*static\\s*\\{");
         } else {
             String cleanMethodName = rawMethod.equals("<init>") ? "(?:[A-Z]\\w*)" : Pattern.quote(rawMethod);
-            pattern = Pattern.compile("(?m)^[ \\t]*(?:@[\\w.]+(?:\\([^)]*\\))?\\s+)*(?:(?:public|protected|private|static|final|native|synchronized|abstract|default)\\s+)*[\\w<>\\[\\],?\\s]*\\b" + cleanMethodName + "\\s*\\([^)]*\\)[^{;]*(\\{|;)");
+            pattern = Pattern.compile("(?m)^[ \\t]*(?:@[\\w.]+(?:\\([^)]*\\))?\\s+)*(?:(?!\\b(?:class|interface|enum|record)\\b)[\\w<>\\[\\],?\\s])*\\b" + cleanMethodName + "\\s*(?:\\([^)]*\\))?\\s*[^{;]*(\\{|;)");
         }
 
         Matcher matcher = pattern.matcher(fullSource);
